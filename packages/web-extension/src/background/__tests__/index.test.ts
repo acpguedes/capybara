@@ -8,6 +8,7 @@ import {
   synchronizeBookmarks
 } from "../index";
 import { searchBookmarks } from "../../domain/services/search";
+import { BOOKMARK_SNAPSHOT_STORAGE_KEY } from "../../domain/models/bookmark-snapshot";
 import type { Bookmark } from "../../domain/models/bookmark";
 import type { CategorizedBookmark } from "../../domain/models/categorized-bookmark";
 
@@ -314,56 +315,129 @@ describe("synchronizeBookmarks", () => {
     }
   });
 
-  it("short-circuits when synchronization is disabled", async () => {
+  it("indexes bookmarks without persisting to sync storage when synchronization is disabled", async () => {
     stubSyncSettings({ enabled: false, keySource: "platform" });
 
-    let chromiumCalls = 0;
-    let firefoxCalls = 0;
-    let mergeCalls = 0;
-    let categorizeCalls = 0;
-    let persistCalls = 0;
+    const chromium: Bookmark[] = [
+      {
+        id: "c-disabled-1",
+        title: "Chromium Reference",
+        url: "https://chromium.example/reference",
+        tags: ["chromium"],
+        createdAt: "2024-03-01T00:00:00.000Z"
+      }
+    ];
+
+    const firefox: Bookmark[] = [
+      {
+        id: "f-disabled-1",
+        title: "Firefox Guide",
+        url: "https://firefox.example/guide",
+        tags: ["firefox"],
+        createdAt: "2024-03-02T00:00:00.000Z"
+      }
+    ];
+
+    const merged: Bookmark[] = [...chromium, ...firefox];
+    const categorized: CategorizedBookmark[] = [
+      {
+        ...merged[0],
+        category: "chromium"
+      },
+      {
+        ...merged[1],
+        category: "mozilla"
+      }
+    ];
 
     const restorePipeline = stubSynchronizationPipeline({
-      chromium: [],
-      firefox: [],
-      merged: [],
-      categorized: []
+      chromium,
+      firefox,
+      merged,
+      categorized
     });
 
-    chromiumProvider.fetchChromiumBookmarks = async () => {
-      chromiumCalls += 1;
-      return [];
-    };
-    firefoxProvider.fetchFirefoxBookmarks = async () => {
-      firefoxCalls += 1;
-      return [];
-    };
-    mergerModule.mergeBookmarks = () => {
-      mergeCalls += 1;
-      return [];
-    };
-    llmCategorizerModule.categorizeBookmarksWithLLM = async () => {
-      categorizeCalls += 1;
-      return [];
-    };
+    const indexCalls: Array<[CategorizedBookmark[], Bookmark[]]> = [];
+    const originalIndex = searchBookmarks.index;
+    searchBookmarks.index = ((bookmarks, mergedInput = []) => {
+      indexCalls.push([bookmarks, mergedInput]);
+      return originalIndex.call(searchBookmarks, bookmarks, mergedInput);
+    }) as typeof searchBookmarks.index;
 
-    const originalPersist = searchBookmarks.persistSnapshot;
-    searchBookmarks.persistSnapshot = (async () => {
-      persistCalls += 1;
-    }) as typeof searchBookmarks.persistSnapshot;
+    const calls: Array<{ area: string; items: Record<string, unknown> }> = [];
+    const extensionGlobals = globalThis as typeof globalThis & {
+      browser?: {
+        storage?: {
+          local?: {
+            get?: (key: unknown) => Promise<Record<string, unknown>>;
+            set: (items: Record<string, unknown>) => Promise<void>;
+          };
+          sync?: {
+            get?: (key: unknown) => Promise<Record<string, unknown>>;
+            set: (items: Record<string, unknown>) => Promise<void>;
+          };
+        };
+      };
+      chrome?: {
+        storage?: unknown;
+      };
+    };
+    const hadBrowser = Object.prototype.hasOwnProperty.call(extensionGlobals, "browser");
+    const hadChrome = Object.prototype.hasOwnProperty.call(extensionGlobals, "chrome");
+    const originalBrowser = extensionGlobals.browser;
+    const originalChrome = extensionGlobals.chrome;
+
+    extensionGlobals.browser = {
+      storage: {
+        local: {
+          async set(items: Record<string, unknown>) {
+            calls.push({ area: "local", items });
+          }
+        },
+        sync: {
+          async set(items: Record<string, unknown>) {
+            calls.push({ area: "sync", items });
+          }
+        }
+      }
+    };
 
     try {
       await synchronizeBookmarks();
     } finally {
-      searchBookmarks.persistSnapshot = originalPersist;
+      searchBookmarks.index = originalIndex;
       restorePipeline();
+
+      if (hadBrowser) {
+        extensionGlobals.browser = originalBrowser;
+      } else {
+        delete extensionGlobals.browser;
+      }
+
+      if (hadChrome) {
+        extensionGlobals.chrome = originalChrome;
+      } else {
+        delete extensionGlobals.chrome;
+      }
     }
 
-    assert.strictEqual(chromiumCalls, 0);
-    assert.strictEqual(firefoxCalls, 0);
-    assert.strictEqual(mergeCalls, 0);
-    assert.strictEqual(categorizeCalls, 0);
-    assert.strictEqual(persistCalls, 0);
+    assert.strictEqual(indexCalls.length, 1);
+    assert.deepStrictEqual(indexCalls[0][0], categorized);
+    assert.deepStrictEqual(indexCalls[0][1], merged);
+
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].area, "local");
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(
+        calls[0].items,
+        BOOKMARK_SNAPSHOT_STORAGE_KEY
+      )
+    );
+    assert.deepStrictEqual(calls[0].items[BOOKMARK_SNAPSHOT_STORAGE_KEY], {
+      version: 1,
+      kind: "plain",
+      snapshot: { merged, categorized }
+    });
   });
 });
 
