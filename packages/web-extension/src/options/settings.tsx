@@ -1,9 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
-import { LLM_CONFIGURATION_STORAGE_KEY, type LLMConfiguration } from "../domain/models/llm-configuration";
+import {
+  LLM_CONFIGURATION_STORAGE_KEY,
+  type LLMConfiguration
+} from "../domain/models/llm-configuration";
+import { SYNC_SETTINGS_STORAGE_KEY } from "../domain/models/sync-settings";
 import { loadLLMConfiguration, saveLLMConfiguration } from "../domain/services/llm-settings";
+import { loadSyncSettings, saveSyncSettings } from "../domain/services/sync-settings";
 
 export function Settings(): JSX.Element {
-  const [syncEnabled, setSyncEnabled] = useState(true);
+  const [syncEnabled, setSyncEnabled] = useState(false);
+  const [syncSecret, setSyncSecret] = useState("");
+  const [syncSaveStatus, setSyncSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [llmEnabled, setLlmEnabled] = useState(false);
   const [llmEndpoint, setLlmEndpoint] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
@@ -14,27 +23,41 @@ export function Settings(): JSX.Element {
     let active = true;
 
     async function hydrateConfiguration(): Promise<void> {
-      const configuration = await loadLLMConfiguration();
-      if (!active) {
-        return;
-      }
+      try {
+        const [configuration, syncSettings] = await Promise.all([
+          loadLLMConfiguration(),
+          loadSyncSettings()
+        ]);
 
-      if (configuration) {
-        applyConfiguration(configuration);
-      } else {
-        applyConfiguration({
-          enabled: false,
-          endpoint: "",
-          apiKey: ""
-        });
+        if (!active) {
+          return;
+        }
+
+        applyLLMConfiguration(
+          configuration ?? {
+            enabled: false,
+            endpoint: "",
+            apiKey: ""
+          }
+        );
+        applySyncSettings(syncSettings);
+      } catch (error) {
+        console.error("Failed to hydrate settings", error);
       }
     }
 
-    function applyConfiguration(configuration: LLMConfiguration): void {
+    function applyLLMConfiguration(configuration: LLMConfiguration): void {
       setLlmEnabled(configuration.enabled);
       setLlmEndpoint(configuration.endpoint ?? "");
       setLlmApiKey(configuration.apiKey ?? "");
       setLlmModel(configuration.model ?? "");
+    }
+
+    function applySyncSettings(
+      settings: Awaited<ReturnType<typeof loadSyncSettings>>
+    ): void {
+      setSyncEnabled(settings.enabled);
+      setSyncSecret(settings.secret ?? "");
     }
 
     void hydrateConfiguration();
@@ -43,6 +66,26 @@ export function Settings(): JSX.Element {
       active = false;
     };
   }, []);
+
+  async function handleSyncSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setSyncSaveStatus("saving");
+
+    try {
+      const trimmedSecret = syncSecret.trim();
+      await saveSyncSettings({
+        enabled: syncEnabled,
+        keySource: trimmedSecret.length > 0 ? "user" : "platform",
+        secret: trimmedSecret.length > 0 ? trimmedSecret : undefined
+      });
+
+      setSyncSaveStatus("saved");
+      setTimeout(() => setSyncSaveStatus("idle"), 2000);
+    } catch (error) {
+      console.error("Failed to persist synchronization settings", error);
+      setSyncSaveStatus("error");
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -67,15 +110,57 @@ export function Settings(): JSX.Element {
 
   return (
     <section>
-      <h2>Synchronization</h2>
-      <label>
-        <input
-          type="checkbox"
-          checked={syncEnabled}
-          onChange={(event) => setSyncEnabled(event.target.checked)}
-        />
-        Enable automatic bookmark synchronization
-      </label>
+      <section aria-labelledby="sync-settings-heading">
+        <h2 id="sync-settings-heading">Synchronization</h2>
+        <p>
+          Multi-device synchronization is optional and disabled by default. When enabled, the
+          extension keeps your merged bookmark index in <code>browser.storage.sync</code>, which is
+          synced through your browser account. The payload is compressed and encrypted before it
+          leaves this device.
+        </p>
+        <form onSubmit={handleSyncSubmit}>
+          <label>
+            <input
+              type="checkbox"
+              checked={syncEnabled}
+              onChange={(event) => setSyncEnabled(event.target.checked)}
+            />
+            Enable multi-device synchronization
+          </label>
+
+          <label>
+            Sync passphrase (optional)
+            <input
+              type="password"
+              value={syncSecret}
+              onChange={(event) => setSyncSecret(event.target.value)}
+              placeholder="Enter a passphrase to share across devices"
+              autoComplete="new-password"
+              disabled={!syncEnabled}
+            />
+          </label>
+          <p>
+            If you provide a passphrase the encryption key is derived from it, allowing other
+            devices with the same secret to decrypt snapshots. Without a passphrase the extension
+            uses device-specific platform entropy, keeping the data local to the current browser
+            profile.
+          </p>
+
+          <button type="submit" disabled={syncSaveStatus === "saving"}>
+            {syncSaveStatus === "saving" ? "Saving..." : "Save synchronization settings"}
+          </button>
+
+          {syncSaveStatus === "saved" && <p role="status">Synchronization settings saved.</p>}
+          {syncSaveStatus === "error" && (
+            <p role="alert">Unable to save synchronization settings. Check the extension console.</p>
+          )}
+        </form>
+        <p>
+          Settings are stored using the browser&apos;s extension storage under the key
+          <code>{SYNC_SETTINGS_STORAGE_KEY}</code>. Disable this option if you prefer your bookmarks
+          to stay on this device only.
+        </p>
+      </section>
 
       <section aria-labelledby="llm-settings-heading">
         <h2 id="llm-settings-heading">LLM Categorization</h2>

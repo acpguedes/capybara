@@ -3,6 +3,7 @@ import { categorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
 import { searchBookmarks } from "../domain/services/search";
 import { fetchChromiumBookmarks } from "./bookmark-sync/chromium-provider";
 import { fetchFirefoxBookmarks } from "./bookmark-sync/firefox-provider";
+import { loadSyncSettings } from "../domain/services/sync-settings";
 
 export const BOOKMARK_SYNC_ALARM_NAME = "capybara::bookmark-sync";
 export const BOOKMARK_SYNC_ALARM_PERIOD_MINUTES = 30;
@@ -31,6 +32,19 @@ export type BackgroundExtensionAPI = {
 };
 
 export async function synchronizeBookmarks(): Promise<void> {
+  let settings: { enabled: boolean };
+
+  try {
+    settings = await loadSyncSettings();
+  } catch (error) {
+    console.error("Failed to load synchronization settings", error);
+    settings = { enabled: false };
+  }
+
+  if (!settings.enabled) {
+    return;
+  }
+
   const [chromiumBookmarks, firefoxBookmarks] = await Promise.all([
     fetchChromiumBookmarks(),
     fetchFirefoxBookmarks()
