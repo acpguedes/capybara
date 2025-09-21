@@ -1,4 +1,4 @@
-import ReactDOM from "react-dom";
+import ReactDOM from "./react-dom-adapter";
 import { App } from "./App";
 
 const rootElement = document.getElementById("root");

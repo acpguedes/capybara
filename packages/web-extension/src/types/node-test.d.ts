@@ -14,3 +14,5 @@ declare module "node:assert/strict" {
   const assert: AssertModule;
   export default assert;
 }
+
+declare function require(moduleName: string): unknown;

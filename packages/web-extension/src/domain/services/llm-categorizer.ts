@@ -1,6 +1,7 @@
 import type { Bookmark } from "../models/bookmark";
+import type { CategorizedBookmark } from "../models/categorized-bookmark";
 import type { LLMConfiguration } from "../models/llm-configuration";
-import { categorizeBookmarks, type CategorizedBookmark } from "./categorizer";
+import { categorizeBookmarks } from "./categorizer";
 import { loadLLMConfiguration } from "./llm-settings";
 
 interface LLMRequestPayload {

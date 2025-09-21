@@ -1,8 +1,5 @@
 import { Bookmark } from "../models/bookmark";
-
-export interface CategorizedBookmark extends Bookmark {
-  category: string;
-}
+import type { CategorizedBookmark } from "../models/categorized-bookmark";
 
 export function categorizeBookmarks(bookmarks: Bookmark[]): CategorizedBookmark[] {
   return bookmarks.map((bookmark) => ({
