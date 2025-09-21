@@ -1,4 +1,5 @@
 import { LLM_CONFIGURATION_STORAGE_KEY, type LLMConfiguration } from "../models/llm-configuration";
+import { getItem, setItem } from "./extension-storage";
 
 function normalizeConfiguration(raw: unknown): LLMConfiguration | null {
   if (!raw || typeof raw !== "object") {
@@ -16,12 +17,10 @@ function normalizeConfiguration(raw: unknown): LLMConfiguration | null {
 }
 
 export async function loadLLMConfiguration(): Promise<LLMConfiguration | null> {
-  const stored = await browser.storage.local.get(LLM_CONFIGURATION_STORAGE_KEY);
-  return normalizeConfiguration(stored[LLM_CONFIGURATION_STORAGE_KEY]);
+  const stored = await getItem(LLM_CONFIGURATION_STORAGE_KEY);
+  return normalizeConfiguration(stored);
 }
 
 export async function saveLLMConfiguration(configuration: LLMConfiguration): Promise<void> {
-  await browser.storage.local.set({
-    [LLM_CONFIGURATION_STORAGE_KEY]: configuration
-  });
+  await setItem(LLM_CONFIGURATION_STORAGE_KEY, configuration);
 }
