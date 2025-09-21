@@ -6,6 +6,37 @@ import {
 import { SYNC_SETTINGS_STORAGE_KEY } from "../domain/models/sync-settings";
 import { loadLLMConfiguration, saveLLMConfiguration } from "../domain/services/llm-settings";
 import { loadSyncSettings, saveSyncSettings } from "../domain/services/sync-settings";
+import { RUNTIME_SYNC_NOW_MESSAGE_TYPE } from "../shared/runtime-messages";
+
+type ExtensionRuntime = {
+  sendMessage?: (message: unknown) => unknown;
+};
+
+type ExtensionGlobals = typeof globalThis & {
+  browser?: { runtime?: ExtensionRuntime };
+  chrome?: { runtime?: ExtensionRuntime };
+};
+
+function requestImmediateSynchronization(): void {
+  const globals = globalThis as ExtensionGlobals;
+  const runtime = globals.browser?.runtime ?? globals.chrome?.runtime;
+
+  if (!runtime?.sendMessage) {
+    return;
+  }
+
+  try {
+    const maybePromise = runtime.sendMessage({
+      type: RUNTIME_SYNC_NOW_MESSAGE_TYPE
+    }) as { catch?: (onRejected: (reason: unknown) => unknown) => unknown } | void;
+
+    maybePromise?.catch?.((error: unknown) => {
+      console.error("Failed to request bookmark synchronization", error);
+    });
+  } catch (error) {
+    console.error("Failed to request bookmark synchronization", error);
+  }
+}
 
 export function Settings(): JSX.Element {
   const [syncEnabled, setSyncEnabled] = useState(false);
@@ -78,6 +109,8 @@ export function Settings(): JSX.Element {
         keySource: trimmedSecret.length > 0 ? "user" : "platform",
         secret: trimmedSecret.length > 0 ? trimmedSecret : undefined
       });
+
+      requestImmediateSynchronization();
 
       setSyncSaveStatus("saved");
       setTimeout(() => setSyncSaveStatus("idle"), 2000);

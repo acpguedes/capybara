@@ -3,6 +3,7 @@ import { categorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
 import { searchBookmarks } from "../domain/services/search";
 import { fetchChromiumBookmarks } from "./bookmark-sync/chromium-provider";
 import { fetchFirefoxBookmarks } from "./bookmark-sync/firefox-provider";
+import { isRuntimeSyncNowMessage } from "../shared/runtime-messages";
 
 export const BOOKMARK_SYNC_ALARM_NAME = "capybara::bookmark-sync";
 export const BOOKMARK_SYNC_ALARM_PERIOD_MINUTES = 30;
@@ -11,9 +12,20 @@ type RuntimeEvent = {
   addListener: (listener: (...args: unknown[]) => void) => void;
 };
 
+type RuntimeMessageListener = (
+  message: unknown,
+  sender: unknown,
+  sendResponse: (response?: unknown) => void
+) => void;
+
+type RuntimeMessageEvent = {
+  addListener: (listener: RuntimeMessageListener) => void;
+};
+
 type RuntimeAPI = {
   onInstalled?: RuntimeEvent;
   onStartup?: RuntimeEvent;
+  onMessage?: RuntimeMessageEvent;
 };
 
 type AlarmListener = (alarm?: { name?: string }) => void;
@@ -70,6 +82,21 @@ function attachRuntimeListener(
   });
 }
 
+function attachRuntimeMessageListener(
+  event: RuntimeMessageEvent | undefined,
+  handler: () => void
+): void {
+  if (!event?.addListener) {
+    return;
+  }
+
+  event.addListener((message) => {
+    if (isRuntimeSyncNowMessage(message)) {
+      handler();
+    }
+  });
+}
+
 function registerAlarmListener(
   alarms: AlarmsAPI | undefined,
   handler: () => void
@@ -114,6 +141,7 @@ export function registerBackgroundListeners(
 
   attachRuntimeListener(extensionAPI.runtime?.onInstalled, handler);
   attachRuntimeListener(extensionAPI.runtime?.onStartup, handler);
+  attachRuntimeMessageListener(extensionAPI.runtime?.onMessage, handler);
   registerAlarmListener(extensionAPI.alarms, handler);
 }
 
