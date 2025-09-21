@@ -1,50 +1,75 @@
 #!/usr/bin/env node
 
-import { access, readdir } from "node:fs/promises";
+import { access, stat } from "node:fs/promises";
 import path from "node:path";
 
-const SRC_DIR = path.resolve("src");
-const DIST_DIR = path.resolve("dist");
+const projectRoot = process.cwd();
+const srcDirectory = path.join(projectRoot, "src");
+const publicDirectory = path.join(projectRoot, "public");
+const distDirectory = path.join(projectRoot, "dist");
 
-async function collectJsxSources(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await collectJsxSources(entryPath)));
-    } else if (entry.name.endsWith(".tsx") || entry.name.endsWith(".jsx")) {
-      files.push(entryPath);
-    }
+async function pathExists(targetPath) {
+  try {
+    await stat(targetPath);
+    return true;
+  } catch {
+    return false;
   }
-
-  return files;
 }
 
-const sourceFiles = await collectJsxSources(SRC_DIR);
+const buildEntries = [
+  {
+    source: path.join(srcDirectory, "background", "index.ts"),
+    output: path.join(distDirectory, "background", "index.js")
+  },
+  {
+    source: path.join(srcDirectory, "popup", "index.tsx"),
+    output: path.join(distDirectory, "popup", "index.js")
+  },
+  {
+    source: path.join(srcDirectory, "options", "settings.tsx"),
+    output: path.join(distDirectory, "options", "settings.js")
+  }
+];
 
-if (sourceFiles.length === 0) {
-  console.log("No TSX/JSX sources detected. Nothing to verify.");
-  process.exit(0);
-}
+const assetEntries = [
+  {
+    source: path.join(publicDirectory, "popup.html"),
+    output: path.join(distDirectory, "popup", "index.html")
+  }
+];
 
 const missingOutputs = [];
+let verifiedCount = 0;
 
-for (const sourceFile of sourceFiles) {
-  const relativePath = path.relative(SRC_DIR, sourceFile);
-  const { dir, name } = path.parse(relativePath);
-  const outputPath = path.join(DIST_DIR, dir, `${name}.js`);
+for (const entry of buildEntries) {
+  if (!(await pathExists(entry.source))) {
+    continue;
+  }
+
+  if (!(await pathExists(entry.output))) {
+    missingOutputs.push(path.relative(projectRoot, entry.output));
+    continue;
+  }
+
+  verifiedCount += 1;
+}
+
+for (const asset of assetEntries) {
+  if (!(await pathExists(asset.source))) {
+    continue;
+  }
 
   try {
-    await access(outputPath);
-  } catch (error) {
-    missingOutputs.push(path.relative(process.cwd(), outputPath));
+    await access(asset.output);
+    verifiedCount += 1;
+  } catch {
+    missingOutputs.push(path.relative(projectRoot, asset.output));
   }
 }
 
 if (missingOutputs.length > 0) {
-  console.error("Missing compiled outputs for the following TSX/JSX sources:");
+  console.error("Missing build outputs:");
   for (const missing of missingOutputs) {
     console.error(` - ${missing}`);
   }
@@ -52,5 +77,5 @@ if (missingOutputs.length > 0) {
 }
 
 console.log(
-  `Verified compiled outputs for ${sourceFiles.length} TSX/JSX source ${sourceFiles.length === 1 ? "file" : "files"}.`
+  `Verified ${verifiedCount} expected build artefact${verifiedCount === 1 ? "" : "s"}.`
 );
