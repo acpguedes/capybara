@@ -5,6 +5,7 @@ interface BrowserStorageArea {
 
 interface BrowserStorage {
   local: BrowserStorageArea;
+  sync?: BrowserStorageArea;
 }
 
 interface BrowserRuntimeEvent {

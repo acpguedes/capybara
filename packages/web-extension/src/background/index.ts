@@ -38,7 +38,13 @@ export async function synchronizeBookmarks(): Promise<void> {
 
   const merged = mergeBookmarks(chromiumBookmarks, firefoxBookmarks);
   const categorized = await categorizeBookmarksWithLLM(merged);
-  searchBookmarks.index(categorized);
+  searchBookmarks.index(categorized, merged);
+
+  try {
+    await searchBookmarks.persistSnapshot();
+  } catch (error) {
+    console.error("Failed to persist bookmark snapshot", error);
+  }
 }
 
 function createSynchronizationHandler(
@@ -119,4 +125,16 @@ const detectedExtensionAPI: BackgroundExtensionAPI | undefined =
     ? (chrome as unknown as BackgroundExtensionAPI)
     : undefined);
 
-registerBackgroundListeners(detectedExtensionAPI);
+export async function bootstrapBackground(
+  extensionAPI: BackgroundExtensionAPI | undefined = detectedExtensionAPI
+): Promise<void> {
+  try {
+    await searchBookmarks.hydrateFromStorage();
+  } catch (error) {
+    console.error("Failed to hydrate search index from storage", error);
+  }
+
+  registerBackgroundListeners(extensionAPI);
+}
+
+void bootstrapBackground();
