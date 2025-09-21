@@ -53,6 +53,14 @@ async function copyPublicAssets(publicDirectory, extensionDirectory) {
           );
           await fs.mkdir(popupDestination, { recursive: true });
           await fs.copyFile(source, path.join(popupDestination, "index.html"));
+        } else if (asset.name === "options.html") {
+          const optionsDestination = path.join(
+            extensionDirectory,
+            "dist",
+            "options"
+          );
+          await fs.mkdir(optionsDestination, { recursive: true });
+          await fs.copyFile(source, path.join(optionsDestination, "index.html"));
         } else {
           await fs.copyFile(source, destination);
         }

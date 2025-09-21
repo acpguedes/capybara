@@ -27,7 +27,7 @@ async function collectEntries() {
   const candidates = [
     resolveEntry(path.join("background", "index.ts")),
     resolveEntry(path.join("popup", "index.tsx")),
-    resolveEntry(path.join("options", "settings.tsx"))
+    resolveEntry(path.join("options", "index.tsx"))
   ];
 
   const entries = {};
@@ -77,6 +77,10 @@ async function copyPublicAssets() {
         const popupDestination = path.join(distDirectory, "popup");
         await mkdir(popupDestination, { recursive: true });
         await copyFile(source, path.join(popupDestination, "index.html"));
+      } else if (asset.name === "options.html") {
+        const optionsDestination = path.join(distDirectory, "options");
+        await mkdir(optionsDestination, { recursive: true });
+        await copyFile(source, path.join(optionsDestination, "index.html"));
       } else {
         const destination = path.join(distDirectory, asset.name);
         await mkdir(path.dirname(destination), { recursive: true });

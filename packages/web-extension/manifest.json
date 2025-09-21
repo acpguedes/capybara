@@ -9,6 +9,10 @@
   "background": {
     "service_worker": "dist/background/index.js"
   },
+  "options_ui": {
+    "page": "dist/options/index.html",
+    "open_in_tab": true
+  },
   "permissions": [
     "bookmarks",
     "storage"
