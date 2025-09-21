@@ -1,15 +1,15 @@
 import { CategorizedBookmark } from "./categorizer";
 
 class SearchIndex {
-  private index: CategorizedBookmark[] = [];
+  private items: CategorizedBookmark[] = [];
 
   public index(bookmarks: CategorizedBookmark[]): void {
-    this.index = bookmarks;
+    this.items = bookmarks;
   }
 
   public query(term: string): CategorizedBookmark[] {
     const normalizedTerm = term.toLowerCase();
-    return this.index.filter((bookmark) => {
+    return this.items.filter((bookmark) => {
       return (
         bookmark.title.toLowerCase().includes(normalizedTerm) ||
         bookmark.url.toLowerCase().includes(normalizedTerm) ||
