@@ -11,6 +11,7 @@ import { searchBookmarks } from "../../domain/services/search";
 import { BOOKMARK_SNAPSHOT_STORAGE_KEY } from "../../domain/models/bookmark-snapshot";
 import type { Bookmark } from "../../domain/models/bookmark";
 import type { CategorizedBookmark } from "../../domain/models/categorized-bookmark";
+import { RUNTIME_SYNC_NOW_MESSAGE_TYPE } from "../../shared/runtime-messages";
 
 const chromiumProvider: any = require("../bookmark-sync/chromium-provider");
 const firefoxProvider: any = require("../bookmark-sync/firefox-provider");
@@ -108,6 +109,48 @@ describe("registerBackgroundListeners", () => {
     startupListener?.();
     await Promise.resolve();
     assert.strictEqual(callCount, 2);
+  });
+
+  it("invokes the synchronizer when receiving a manual synchronization request", async () => {
+    let messageListener:
+      | ((
+          message: unknown,
+          sender: unknown,
+          sendResponse: (response?: unknown) => void
+        ) => void)
+      | undefined;
+
+    const runtime = {
+      onMessage: {
+        addListener: (
+          listener: (
+            message: unknown,
+            sender: unknown,
+            sendResponse: (response?: unknown) => void
+          ) => void
+        ) => {
+          messageListener = listener;
+        }
+      }
+    };
+
+    let callCount = 0;
+    const synchronizer = () => {
+      callCount += 1;
+      return Promise.resolve();
+    };
+
+    registerBackgroundListeners({ runtime }, synchronizer);
+
+    assert.ok(messageListener);
+
+    messageListener?.({ type: RUNTIME_SYNC_NOW_MESSAGE_TYPE }, {}, () => {});
+    await Promise.resolve();
+    assert.strictEqual(callCount, 1);
+
+    messageListener?.({ type: "something-else" }, {}, () => {});
+    await Promise.resolve();
+    assert.strictEqual(callCount, 1);
   });
 
   it("schedules and reacts to periodic alarms", async () => {
