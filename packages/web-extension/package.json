@@ -1,0 +1,13 @@
+{
+  "name": "@capybara/web-extension",
+  "version": "0.0.1",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "npm run build --silent && node --test dist/domain/services/__tests__/*.test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
