@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Capybara",
+  "version": "0.0.1",
+  "description": "Unified bookmarks across browsers with categorization and fast search.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/index.js"
+  },
+  "permissions": [
+    "bookmarks",
+    "storage"
+  ]
+}
