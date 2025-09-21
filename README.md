@@ -1,21 +1,42 @@
-# GitHub Repository Description for "Capybara" - A Bookmark Management Extension
+# Capybara
 
-# Capybara - Your Friendly Bookmark Organizer
+Capybara is a browser extension that unifies bookmarks from multiple browsers into a single, searchable library. The project is intentionally lightweight today, but its architecture is designed to grow into a dependable companion for people who maintain browser workflows across devices and ecosystems.
 
-Capybara is a delightful browser extension designed to streamline and organize your bookmarks effortlessly. Embrace the simplicity of bookmark management as Capybara automatically merges bookmarks from your favorite browsers like Chromium and Firefox, making them easily accessible in one unified interface.
+## Vision
 
-## Key Features:
+Deliver a privacy-conscious bookmark hub that mirrors the calm, helpful nature of its namesake: effortless setup, no data lock-in, and instant recall of the things you save online. Capybara should feel invisible when you do not need it and unmissable when you do.
 
-  - **Seamless Bookmark Merging:** Capybara seamlessly combines bookmarks from different browsers, ensuring you have all your favorite links in one place without the hassle.
-  - **Intelligent Categorization:** Say goodbye to cluttered bookmarks! Capybara automatically classifies bookmarks into hierarchical themes, making it a breeze to find what you need, when you need it.
-  - **User-Friendly Interface:** Enjoy a clean and intuitive user interface that allows you to navigate through your bookmarks with ease, powered by Capybara's friendly design.
-  - **Cross-Browser Compatibility:** Capybara works harmoniously across popular browsers like Chrome, Microsoft Edge, and Firefox, providing a consistent bookmarking experience wherever you go.
-  - **Effortless Bookmark Search:** Find bookmarks in a snap using Capybara's built-in search functionality, saving you valuable time and effort.
+## End-to-End Experience
 
-## Why Capybara?
+1. The background worker boots and calls `synchronizeBookmarks`, pulling bookmark trees from Chromium- and Firefox-compatible APIs.
+2. Domain services merge the payloads, infer categories, and refresh the in-memory search index.
+3. The popup UI lets you filter the combined library instantly, while the options surface exposes synchronization controls.
+4. Subsequent syncs reuse the same pipeline, making it easy to add manual refresh actions or alarms without changing the data model.
 
-At Capybara, we believe that bookmark management should be a delightful experience, just like interacting with these friendly and sociable creatures in the wild. We are passionate about creating an extension that simplifies your digital life and lets you focus on what truly matters.
+## Feature Highlights
 
-## Contributing and Feedback:
+- **Cross-browser merging:** Deduplicate bookmarks coming from Chromium and Firefox providers while preserving unique entries.
+- **Automatic organization:** Derive categories from tags or hostnames so similar links cluster together even without manual filing.
+- **Instant search:** Query titles, URLs, and categories entirely client-side via the shared search index.
+- **Friendly UI surfaces:** React-driven popup and options pages keep interactions simple while leaving room for advanced features.
 
-We welcome contributions from the open-source community and value your feedback to enhance Capybara further. Join us on this bookmark organization journey and help make Capybara the ultimate bookmark management tool!
+## Architecture Summary
+
+- **Background sync:** [`packages/web-extension/src/background/index.ts`](packages/web-extension/src/background/index.ts) orchestrates multi-browser synchronization using provider modules under `src/background/bookmark-sync`.
+- **Domain services:** [`merger.ts`](packages/web-extension/src/domain/services/merger.ts), [`categorizer.ts`](packages/web-extension/src/domain/services/categorizer.ts), and [`search.ts`](packages/web-extension/src/domain/services/search.ts) compose the data pipeline feeding the UI.
+- **Interfaces:** The popup [`App`](packages/web-extension/src/popup/App.tsx) surfaces indexed bookmarks, while the options [`Settings`](packages/web-extension/src/options/settings.tsx) component demonstrates configuration hooks.
+
+A deeper architectural breakdown is available in [`docs/architecture/overview.md`](docs/architecture/overview.md).
+
+## Implementation Strategy
+
+- Replace the stubbed Chromium and Firefox bookmark providers with production-ready adapters that respect browser permissions.
+- Persist synchronization preferences and future options using browser storage APIs.
+- Expand the domain layer with unit tests and enrichment services as new features (e.g., deduplicated folders or recents) land.
+- Tighten search relevancy with scoring or fuzzy matching once the baseline experience is stable.
+
+## Documentation & Contributions
+
+Detailed guidance lives in the [`docs/`](docs/README.md) directory, covering architecture decisions, synchronization protocol notes, UX expectations, and operational playbooks.
+
+Contributions are welcome—open an issue or pull request describing the problem you are solving, reference the relevant docs, and keep the README up to date as capabilities evolve.
