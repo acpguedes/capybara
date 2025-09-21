@@ -6,9 +6,15 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "verify:jsx": "node ./scripts/verify-jsx-build.mjs",
-    "test": "npm run build --silent && node --test dist/domain/services/__tests__/*.test.js dist/background/bookmark-sync/__tests__/*.test.js dist/background/__tests__/*.test.js"
+    "test": "npm run build --silent && node --test dist/domain/services/__tests__/*.test.js dist/background/bookmark-sync/__tests__/*.test.js dist/background/__tests__/*.test.js dist/popup/__tests__/*.test.js"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
     "typescript": "^5.4.0"
   }
 }
