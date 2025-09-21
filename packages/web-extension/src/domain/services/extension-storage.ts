@@ -1,15 +1,20 @@
 import {
   BOOKMARK_SNAPSHOT_STORAGE_KEY,
-  type BookmarkSnapshot
+  type BookmarkSnapshotStorageValue
 } from "../models/bookmark-snapshot";
 import {
   LLM_CONFIGURATION_STORAGE_KEY,
   type LLMConfiguration
 } from "../models/llm-configuration";
+import {
+  SYNC_SETTINGS_STORAGE_KEY,
+  type SyncSettings
+} from "../models/sync-settings";
 
 type StorageKeyMap = {
   [LLM_CONFIGURATION_STORAGE_KEY]: LLMConfiguration;
-  [BOOKMARK_SNAPSHOT_STORAGE_KEY]: BookmarkSnapshot;
+  [BOOKMARK_SNAPSHOT_STORAGE_KEY]: BookmarkSnapshotStorageValue;
+  [SYNC_SETTINGS_STORAGE_KEY]: SyncSettings;
 };
 
 type StorageKey = keyof StorageKeyMap & string;

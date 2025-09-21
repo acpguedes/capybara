@@ -2,9 +2,16 @@ import type { Bookmark } from "../models/bookmark";
 import type { CategorizedBookmark } from "../models/categorized-bookmark";
 import {
   BOOKMARK_SNAPSHOT_STORAGE_KEY,
-  type BookmarkSnapshot
+  type BookmarkSnapshot,
+  type BookmarkSnapshotStorageValue
 } from "../models/bookmark-snapshot";
+import { loadSyncSettings } from "./sync-settings";
 import { getItem, setItem } from "./extension-storage";
+import {
+  decryptBookmarkSnapshot,
+  encryptBookmarkSnapshot,
+  type BookmarkSnapshotEncryptionContext
+} from "./bookmark-snapshot-crypto";
 
 class SearchIndex {
   private items: CategorizedBookmark[] = [];
@@ -50,19 +57,77 @@ class SearchIndex {
   }
 
   public async hydrateFromStorage(): Promise<void> {
-    const snapshot = await getItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, {
-      area: ["local", "sync"]
+    let settings: { enabled: boolean; secret?: string };
+
+    try {
+      settings = await loadSyncSettings();
+    } catch (error) {
+      console.error("Failed to load synchronization settings", error);
+      settings = { enabled: false };
+    }
+
+    const context = this.resolveEncryptionContext(settings.enabled, settings.secret);
+
+    const storageValue = await getItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, {
+      area: settings.enabled ? ["local", "sync"] : ["local"]
     });
 
-    this.deserialize(snapshot);
+    if (!storageValue) {
+      this.deserialize(null);
+      return;
+    }
+
+    try {
+      const snapshot = await decryptBookmarkSnapshot(storageValue, context);
+      this.deserialize(snapshot);
+    } catch (error) {
+      console.error("Failed to decrypt bookmark snapshot", error);
+      this.deserialize(null);
+    }
   }
 
   public async persistSnapshot(): Promise<void> {
     const snapshot = this.serialize();
+    let settings: { enabled: boolean; secret?: string };
 
-    await setItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, snapshot, {
-      area: ["local", "sync"]
-    });
+    try {
+      settings = await loadSyncSettings();
+    } catch (error) {
+      console.error("Failed to load synchronization settings", error);
+      settings = { enabled: false };
+    }
+    const context = this.resolveEncryptionContext(settings.enabled, settings.secret);
+
+    let storageValue: BookmarkSnapshotStorageValue;
+
+    if (context) {
+      storageValue = await encryptBookmarkSnapshot(snapshot, context);
+    } else {
+      storageValue = { version: 1, kind: "plain", snapshot };
+    }
+
+    await setItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, storageValue, { area: "local" });
+
+    if (settings.enabled) {
+      await setItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, storageValue, {
+        area: "sync"
+      });
+    }
+  }
+
+  private resolveEncryptionContext(
+    enabled: boolean,
+    secret: string | undefined
+  ): BookmarkSnapshotEncryptionContext | null {
+    if (!enabled) {
+      return null;
+    }
+
+    if (secret && secret.trim().length > 0) {
+      return { keySource: "user", secret: secret.trim() };
+    }
+
+    return { keySource: "platform" };
   }
 }
 

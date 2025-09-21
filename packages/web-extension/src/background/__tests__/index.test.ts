@@ -15,6 +15,21 @@ const chromiumProvider: any = require("../bookmark-sync/chromium-provider");
 const firefoxProvider: any = require("../bookmark-sync/firefox-provider");
 const mergerModule: any = require("../../domain/services/merger");
 const llmCategorizerModule: any = require("../../domain/services/llm-categorizer");
+const syncSettingsModule: any = require("../../domain/services/sync-settings");
+
+const originalLoadSyncSettings = syncSettingsModule.loadSyncSettings as () => Promise<{
+  enabled: boolean;
+  keySource: string;
+  secret?: string;
+}>;
+
+function stubSyncSettings(settings: {
+  enabled: boolean;
+  keySource: string;
+  secret?: string;
+}): void {
+  syncSettingsModule.loadSyncSettings = async () => settings;
+}
 
 function stubSynchronizationPipeline(options: {
   chromium: Bookmark[];
@@ -53,6 +68,7 @@ function createDeferred<T>() {
 
 afterEach(() => {
   searchBookmarks.index([], []);
+  syncSettingsModule.loadSyncSettings = originalLoadSyncSettings;
 });
 
 describe("registerBackgroundListeners", () => {
@@ -175,6 +191,8 @@ describe("registerBackgroundListeners", () => {
 
 describe("synchronizeBookmarks", () => {
   it("indexes bookmarks and persists the snapshot", async () => {
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
     const chromium: Bookmark[] = [
       {
         id: "c-1",
@@ -242,6 +260,8 @@ describe("synchronizeBookmarks", () => {
   });
 
   it("logs persistence failures and resolves", async () => {
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
     const chromium: Bookmark[] = [
       {
         id: "c-2",
@@ -292,6 +312,58 @@ describe("synchronizeBookmarks", () => {
       searchBookmarks.persistSnapshot = originalPersist;
       restorePipeline();
     }
+  });
+
+  it("short-circuits when synchronization is disabled", async () => {
+    stubSyncSettings({ enabled: false, keySource: "platform" });
+
+    let chromiumCalls = 0;
+    let firefoxCalls = 0;
+    let mergeCalls = 0;
+    let categorizeCalls = 0;
+    let persistCalls = 0;
+
+    const restorePipeline = stubSynchronizationPipeline({
+      chromium: [],
+      firefox: [],
+      merged: [],
+      categorized: []
+    });
+
+    chromiumProvider.fetchChromiumBookmarks = async () => {
+      chromiumCalls += 1;
+      return [];
+    };
+    firefoxProvider.fetchFirefoxBookmarks = async () => {
+      firefoxCalls += 1;
+      return [];
+    };
+    mergerModule.mergeBookmarks = () => {
+      mergeCalls += 1;
+      return [];
+    };
+    llmCategorizerModule.categorizeBookmarksWithLLM = async () => {
+      categorizeCalls += 1;
+      return [];
+    };
+
+    const originalPersist = searchBookmarks.persistSnapshot;
+    searchBookmarks.persistSnapshot = (async () => {
+      persistCalls += 1;
+    }) as typeof searchBookmarks.persistSnapshot;
+
+    try {
+      await synchronizeBookmarks();
+    } finally {
+      searchBookmarks.persistSnapshot = originalPersist;
+      restorePipeline();
+    }
+
+    assert.strictEqual(chromiumCalls, 0);
+    assert.strictEqual(firefoxCalls, 0);
+    assert.strictEqual(mergeCalls, 0);
+    assert.strictEqual(categorizeCalls, 0);
+    assert.strictEqual(persistCalls, 0);
   });
 });
 
