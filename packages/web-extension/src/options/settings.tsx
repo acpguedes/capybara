@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   LLM_CONFIGURATION_STORAGE_KEY,
   type LLMConfiguration
@@ -51,6 +51,22 @@ export function Settings(): JSX.Element {
   const [llmModel, setLlmModel] = useState("");
   const [llmError, setLlmError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const syncSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const llmSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (syncSaveTimeoutRef.current) {
+        clearTimeout(syncSaveTimeoutRef.current);
+        syncSaveTimeoutRef.current = null;
+      }
+
+      if (llmSaveTimeoutRef.current) {
+        clearTimeout(llmSaveTimeoutRef.current);
+        llmSaveTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -115,7 +131,14 @@ export function Settings(): JSX.Element {
       requestImmediateSynchronization();
 
       setSyncSaveStatus("saved");
-      setTimeout(() => setSyncSaveStatus("idle"), 2000);
+      if (syncSaveTimeoutRef.current) {
+        clearTimeout(syncSaveTimeoutRef.current);
+      }
+
+      syncSaveTimeoutRef.current = setTimeout(() => {
+        syncSaveTimeoutRef.current = null;
+        setSyncSaveStatus("idle");
+      }, 2000);
     } catch (error) {
       console.error("Failed to persist synchronization settings", error);
       setSyncSaveStatus("error");
@@ -162,7 +185,14 @@ export function Settings(): JSX.Element {
       });
 
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
+      if (llmSaveTimeoutRef.current) {
+        clearTimeout(llmSaveTimeoutRef.current);
+      }
+
+      llmSaveTimeoutRef.current = setTimeout(() => {
+        llmSaveTimeoutRef.current = null;
+        setSaveStatus("idle");
+      }, 2000);
     } catch (error) {
       console.error("Failed to persist LLM configuration", error);
       setLlmError((previous) =>
