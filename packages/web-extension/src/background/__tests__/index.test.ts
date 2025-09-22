@@ -1,15 +1,6 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  BOOKMARK_SYNC_ALARM_NAME,
-  BOOKMARK_SYNC_ALARM_PERIOD_MINUTES,
-  bootstrapBackground,
-  registerBackgroundListeners,
-  resetSynchronizeBookmarksDependencies,
-  setSynchronizeBookmarksDependencies,
-  synchronizeBookmarks
-} from "../index";
-import {
   resetSearchSyncSettingsLoader,
   searchBookmarks,
   setSearchSyncSettingsLoader
@@ -20,6 +11,49 @@ import type { CategorizedBookmark } from "../../domain/models/categorized-bookma
 import type { SyncSettings } from "../../domain/models/sync-settings";
 import { RUNTIME_SYNC_NOW_MESSAGE_TYPE } from "../../shared/runtime-messages";
 import type { BookmarkProviderAvailability } from "../bookmark-sync/provider-result";
+
+let BOOKMARK_SYNC_ALARM_NAME: typeof import("../index")["BOOKMARK_SYNC_ALARM_NAME"];
+let BOOKMARK_SYNC_ALARM_PERIOD_MINUTES: typeof import("../index")["BOOKMARK_SYNC_ALARM_PERIOD_MINUTES"];
+let bootstrapBackground: typeof import("../index")["bootstrapBackground"];
+let registerBackgroundListeners: typeof import("../index")["registerBackgroundListeners"];
+let resetSynchronizeBookmarksDependencies: typeof import("../index")["resetSynchronizeBookmarksDependencies"];
+let setSynchronizeBookmarksDependencies: typeof import("../index")["setSynchronizeBookmarksDependencies"];
+let synchronizeBookmarks: typeof import("../index")["synchronizeBookmarks"];
+
+let automaticBootstrapHydrationCount = 0;
+let automaticBootstrapConsoleErrors: unknown[][] = [];
+
+const backgroundModuleReady: Promise<void> = (async () => {
+  const originalHydrate = searchBookmarks.hydrateFromStorage;
+  const originalConsoleError = console.error;
+  const consoleErrorCalls: unknown[][] = [];
+
+  searchBookmarks.hydrateFromStorage = async () => {
+    automaticBootstrapHydrationCount += 1;
+  };
+
+  console.error = (...args: unknown[]) => {
+    consoleErrorCalls.push(args);
+  };
+
+  try {
+    const backgroundModule = await import("../index");
+
+    ({
+      BOOKMARK_SYNC_ALARM_NAME,
+      BOOKMARK_SYNC_ALARM_PERIOD_MINUTES,
+      bootstrapBackground,
+      registerBackgroundListeners,
+      resetSynchronizeBookmarksDependencies,
+      setSynchronizeBookmarksDependencies,
+      synchronizeBookmarks
+    } = backgroundModule);
+  } finally {
+    searchBookmarks.hydrateFromStorage = originalHydrate;
+    console.error = originalConsoleError;
+    automaticBootstrapConsoleErrors = consoleErrorCalls;
+  }
+})();
 function stubSyncSettings(settings: SyncSettings): void {
   setSearchSyncSettingsLoader(async () => settings);
 }
@@ -60,14 +94,24 @@ function createDeferred<T>() {
   return { promise, resolve: resolve!, reject: reject! };
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await backgroundModuleReady;
   searchBookmarks.index([], []);
   resetSearchSyncSettingsLoader();
   resetSynchronizeBookmarksDependencies();
 });
 
+describe("automatic bootstrap", () => {
+  it("skips automatic hydration when storage namespaces are unavailable", async () => {
+    await backgroundModuleReady;
+    assert.strictEqual(automaticBootstrapHydrationCount, 0);
+    assert.deepStrictEqual(automaticBootstrapConsoleErrors, []);
+  });
+});
+
 describe("registerBackgroundListeners", () => {
   it("invokes the synchronizer when runtime events fire", async () => {
+    await backgroundModuleReady;
     let installedListener: ((...args: unknown[]) => void) | undefined;
     let startupListener: ((...args: unknown[]) => void) | undefined;
 
@@ -105,6 +149,7 @@ describe("registerBackgroundListeners", () => {
   });
 
   it("invokes the synchronizer when receiving a manual synchronization request", async () => {
+    await backgroundModuleReady;
     let messageListener:
       | ((
           message: unknown,
@@ -147,6 +192,7 @@ describe("registerBackgroundListeners", () => {
   });
 
   it("schedules and reacts to periodic alarms", async () => {
+    await backgroundModuleReady;
     let alarmListener: ((alarm?: { name?: string }) => void) | undefined;
     let createdAlarmName: string | undefined;
     let createdAlarmPeriod: number | undefined;
@@ -192,6 +238,7 @@ describe("registerBackgroundListeners", () => {
   });
 
   it("logs synchronization failures", async () => {
+    await backgroundModuleReady;
     let installedListener: ((...args: unknown[]) => void) | undefined;
     const runtime = {
       onInstalled: {
@@ -228,6 +275,7 @@ describe("registerBackgroundListeners", () => {
 
 describe("synchronizeBookmarks", () => {
   it("indexes bookmarks and persists the snapshot", async () => {
+    await backgroundModuleReady;
     stubSyncSettings({ enabled: true, keySource: "platform" });
 
     const chromium: Bookmark[] = [
@@ -299,6 +347,7 @@ describe("synchronizeBookmarks", () => {
   });
 
   it("logs persistence failures and resolves", async () => {
+    await backgroundModuleReady;
     stubSyncSettings({ enabled: true, keySource: "platform" });
 
     const chromium: Bookmark[] = [
@@ -355,6 +404,7 @@ describe("synchronizeBookmarks", () => {
   });
 
   it("indexes bookmarks without persisting to sync storage when synchronization is disabled", async () => {
+    await backgroundModuleReady;
     stubSyncSettings({ enabled: false, keySource: "platform" });
 
     const chromium: Bookmark[] = [
@@ -482,6 +532,7 @@ describe("synchronizeBookmarks", () => {
   });
 
   it("preserves bookmarks collected from different browsers across consecutive runs", async () => {
+    await backgroundModuleReady;
     stubSyncSettings({ enabled: true, keySource: "platform" });
 
     const chromiumBookmarks: Bookmark[] = [
@@ -626,6 +677,7 @@ describe("synchronizeBookmarks", () => {
   });
 
   it("removes Chromium bookmarks that disappear from later fetches", async () => {
+    await backgroundModuleReady;
     stubSyncSettings({ enabled: true, keySource: "platform" });
 
     const chromiumBookmark: Bookmark = {
@@ -703,6 +755,7 @@ describe("synchronizeBookmarks", () => {
   });
 
   it("removes Firefox bookmarks that disappear from later fetches", async () => {
+    await backgroundModuleReady;
     stubSyncSettings({ enabled: true, keySource: "platform" });
 
     const chromiumBookmark: Bookmark = {
@@ -782,6 +835,7 @@ describe("synchronizeBookmarks", () => {
 
 describe("bootstrapBackground", () => {
   it("hydrates the search index before registering listeners", async () => {
+    await backgroundModuleReady;
     const deferred = createDeferred<void>();
     const originalHydrate = searchBookmarks.hydrateFromStorage;
     let listenerRegistered = false;
@@ -813,6 +867,7 @@ describe("bootstrapBackground", () => {
   });
 
   it("logs hydration failures and still registers listeners", async () => {
+    await backgroundModuleReady;
     const error = new Error("hydrate failure");
     const originalHydrate = searchBookmarks.hydrateFromStorage;
     searchBookmarks.hydrateFromStorage = () => Promise.reject(error);

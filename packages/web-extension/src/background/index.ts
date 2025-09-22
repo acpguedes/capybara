@@ -243,13 +243,20 @@ export function registerBackgroundListeners(
   registerAlarmListener(extensionAPI.alarms, handler);
 }
 
+type ExtensionGlobals = typeof globalThis & {
+  browser?: { storage?: unknown };
+  chrome?: { storage?: unknown };
+};
+
+const extensionGlobals = globalThis as ExtensionGlobals;
+
 const detectedExtensionAPI: BackgroundExtensionAPI | undefined =
-  (typeof browser !== "undefined"
-    ? (browser as unknown as BackgroundExtensionAPI)
-    : undefined) ??
-  (typeof chrome !== "undefined"
-    ? (chrome as unknown as BackgroundExtensionAPI)
-    : undefined);
+  (extensionGlobals.browser as unknown as BackgroundExtensionAPI | undefined) ??
+  (extensionGlobals.chrome as unknown as BackgroundExtensionAPI | undefined);
+
+const shouldBootstrapAutomatically =
+  Boolean(extensionGlobals.browser?.storage) ||
+  Boolean(extensionGlobals.chrome?.storage);
 
 export async function bootstrapBackground(
   extensionAPI: BackgroundExtensionAPI | undefined = detectedExtensionAPI
@@ -263,4 +270,6 @@ export async function bootstrapBackground(
   registerBackgroundListeners(extensionAPI);
 }
 
-void bootstrapBackground();
+if (shouldBootstrapAutomatically) {
+  void bootstrapBackground(detectedExtensionAPI);
+}
