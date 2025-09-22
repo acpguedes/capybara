@@ -51,7 +51,8 @@ describe("searchBookmarks storage integration", () => {
         title: "Alpha",
         url: "https://alpha.test",
         tags: ["alpha"],
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -95,7 +96,8 @@ describe("searchBookmarks storage integration", () => {
         title: "Copy Test",
         url: "https://copy.test",
         tags: ["copy"],
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -117,7 +119,8 @@ describe("searchBookmarks storage integration", () => {
       title: "Mutated",
       url: "https://mutated.test",
       tags: ["mutated"],
-      createdAt: "2024-01-02T00:00:00.000Z"
+      createdAt: "2024-01-02T00:00:00.000Z",
+      source: "firefox"
     });
 
     assert.deepStrictEqual(searchBookmarks.getMergedSnapshot(), merged);
@@ -132,14 +135,16 @@ describe("searchBookmarks storage integration", () => {
         title: "Alpha",
         url: "https://alpha.test",
         tags: ["alpha"],
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        source: "chromium"
       },
       {
         id: "merged-2",
         title: "Beta",
         url: "https://beta.test",
         tags: ["beta"],
-        createdAt: "2024-01-02T00:00:00.000Z"
+        createdAt: "2024-01-02T00:00:00.000Z",
+        source: "firefox"
       }
     ];
 
@@ -206,7 +211,8 @@ describe("searchBookmarks storage integration", () => {
         title: "Alpha",
         url: "https://alpha.test",
         tags: ["alpha"],
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -269,7 +275,8 @@ describe("searchBookmarks storage integration", () => {
         title: "Gamma",
         url: "https://gamma.test",
         tags: ["gamma"],
-        createdAt: "2024-01-03T00:00:00.000Z"
+        createdAt: "2024-01-03T00:00:00.000Z",
+        source: "firefox"
       }
     ];
 

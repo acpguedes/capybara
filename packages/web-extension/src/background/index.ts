@@ -1,10 +1,14 @@
 import { mergeBookmarks as defaultMergeBookmarks } from "../domain/services/merger";
 import { categorizeBookmarksWithLLM as defaultCategorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
 import { searchBookmarks } from "../domain/services/search";
-import type { Bookmark } from "../domain/models/bookmark";
+import type { Bookmark, BookmarkSource } from "../domain/models/bookmark";
 import { fetchChromiumBookmarks as defaultFetchChromiumBookmarks } from "./bookmark-sync/chromium-provider";
 import { fetchFirefoxBookmarks as defaultFetchFirefoxBookmarks } from "./bookmark-sync/firefox-provider";
 import { isRuntimeSyncNowMessage } from "../shared/runtime-messages";
+import type {
+  BookmarkProviderAvailability,
+  BookmarkProviderResult
+} from "./bookmark-sync/provider-result";
 
 export const BOOKMARK_SYNC_ALARM_NAME = "capybara::bookmark-sync";
 export const BOOKMARK_SYNC_ALARM_PERIOD_MINUTES = 30;
@@ -42,9 +46,15 @@ export function resetSynchronizeBookmarksDependencies(): void {
   };
 }
 
+type ProviderAvailabilityMap = Record<
+  BookmarkSource,
+  BookmarkProviderAvailability
+>;
+
 function combineWithExistingBookmarks(
   latest: Bookmark[],
-  existing: Bookmark[]
+  existing: Bookmark[],
+  availability: ProviderAvailabilityMap
 ): Bookmark[] {
   if (existing.length === 0) {
     return [...latest];
@@ -54,9 +64,17 @@ function combineWithExistingBookmarks(
   const seen = new Set(latest.map((bookmark) => bookmark.id));
 
   for (const bookmark of existing) {
-    if (!seen.has(bookmark.id)) {
-      combined.push(bookmark);
+    if (seen.has(bookmark.id)) {
+      continue;
     }
+
+    const source = bookmark.source;
+
+    if (availability[source] === "success") {
+      continue;
+    }
+
+    combined.push(bookmark);
   }
 
   return combined;
@@ -104,14 +122,30 @@ export async function synchronizeBookmarks(): Promise<void> {
     categorizeBookmarksWithLLM
   } = synchronizeBookmarksDependencies;
 
-  const [chromiumBookmarks, firefoxBookmarks] = await Promise.all([
-    fetchChromiumBookmarks(),
-    fetchFirefoxBookmarks()
+  const [chromiumResult, firefoxResult] = await Promise.all([
+    fetchChromiumBookmarks().catch(
+      (error): BookmarkProviderResult => {
+        console.error("Failed to fetch Chromium bookmarks", error);
+        return { bookmarks: [], availability: "unavailable" };
+      }
+    ),
+    fetchFirefoxBookmarks().catch(
+      (error): BookmarkProviderResult => {
+        console.error("Failed to fetch Firefox bookmarks", error);
+        return { bookmarks: [], availability: "unavailable" };
+      }
+    )
   ]);
 
-  const latestMerged = mergeBookmarks(chromiumBookmarks, firefoxBookmarks);
+  const latestMerged = mergeBookmarks(
+    chromiumResult.bookmarks,
+    firefoxResult.bookmarks
+  );
   const existingMerged = searchBookmarks.getMergedSnapshot();
-  const merged = combineWithExistingBookmarks(latestMerged, existingMerged);
+  const merged = combineWithExistingBookmarks(latestMerged, existingMerged, {
+    chromium: chromiumResult.availability,
+    firefox: firefoxResult.availability
+  });
 
   const categorized = await categorizeBookmarksWithLLM(merged);
   searchBookmarks.index(categorized, merged);
