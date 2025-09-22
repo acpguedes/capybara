@@ -2,7 +2,8 @@ import type {
   BookmarkSnapshot,
   BookmarkSnapshotStorageValue,
   EncryptedBookmarkSnapshotPayload,
-  PlainBookmarkSnapshotPayload
+  PlainBookmarkSnapshotPayload,
+  BookmarkSnapshotCompression
 } from "../models/bookmark-snapshot";
 import type { SyncKeySource } from "../models/sync-settings";
 
@@ -12,11 +13,37 @@ export interface BookmarkSnapshotEncryptionContext {
 }
 
 const ENCRYPTION_ALGORITHM = "AES-GCM";
-const COMPRESSION_FORMAT = "gzip";
+const COMPRESSION_FORMAT: BookmarkSnapshotCompression = "gzip";
 const KEY_LENGTH = 256;
 const PBKDF2_ITERATIONS = 250_000;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
+
+type CompressionStreamConstructor = new (format: string) => {
+  readable: ReadableStream<Uint8Array>;
+  writable: WritableStream<Uint8Array>;
+};
+
+type DecompressionStreamConstructor = new (format: string) => {
+  readable: ReadableStream<Uint8Array>;
+  writable: WritableStream<Uint8Array>;
+};
+
+function getCompressionStreamConstructor(): CompressionStreamConstructor | null {
+  const { CompressionStream } = globalThis as {
+    CompressionStream?: CompressionStreamConstructor;
+  };
+
+  return typeof CompressionStream === "function" ? CompressionStream : null;
+}
+
+function getDecompressionStreamConstructor(): DecompressionStreamConstructor | null {
+  const { DecompressionStream } = globalThis as {
+    DecompressionStream?: DecompressionStreamConstructor;
+  };
+
+  return typeof DecompressionStream === "function" ? DecompressionStream : null;
+}
 
 function toBase64(bytes: Uint8Array): string {
   const nodeBuffer = (globalThis as { Buffer?: any }).Buffer;
@@ -120,25 +147,62 @@ async function deriveKey(
   );
 }
 
-async function compress(payload: string): Promise<Uint8Array> {
-  const stream = new Blob([payload]).stream().pipeThrough(
-    new CompressionStream(COMPRESSION_FORMAT)
-  );
-  const response = new Response(stream);
-  const buffer = await response.arrayBuffer();
-  return new Uint8Array(buffer as ArrayBuffer);
+async function compress(
+  payload: string
+): Promise<{ data: Uint8Array; compression: BookmarkSnapshotCompression }> {
+  const CompressionStreamCtor = getCompressionStreamConstructor();
+  const DecompressionStreamCtor = getDecompressionStreamConstructor();
+
+  if (
+    CompressionStreamCtor &&
+    DecompressionStreamCtor &&
+    typeof Blob !== "undefined" &&
+    typeof Response !== "undefined"
+  ) {
+    const stream = new Blob([payload]).stream().pipeThrough(
+      new CompressionStreamCtor(COMPRESSION_FORMAT)
+    );
+    const response = new Response(stream);
+    const buffer = await response.arrayBuffer();
+    return {
+      data: new Uint8Array(buffer as ArrayBuffer),
+      compression: COMPRESSION_FORMAT
+    };
+  }
+
+  const encoder = new TextEncoder();
+  return { data: encoder.encode(payload), compression: "none" };
 }
 
-async function decompress(payload: Uint8Array): Promise<string> {
-  const sliced = payload.buffer.slice(
-    payload.byteOffset,
-    payload.byteOffset + payload.byteLength
-  ) as ArrayBuffer;
-  const stream = new Blob([sliced]).stream().pipeThrough(
-    new DecompressionStream(COMPRESSION_FORMAT)
-  );
-  const response = new Response(stream);
-  return response.text();
+async function decompress(
+  payload: Uint8Array,
+  compression: BookmarkSnapshotCompression
+): Promise<string> {
+  const DecompressionStreamCtor = getDecompressionStreamConstructor();
+
+  if (
+    DecompressionStreamCtor &&
+    typeof Blob !== "undefined" &&
+    typeof Response !== "undefined" &&
+    compression === COMPRESSION_FORMAT
+  ) {
+    const sliced = payload.buffer.slice(
+      payload.byteOffset,
+      payload.byteOffset + payload.byteLength
+    ) as ArrayBuffer;
+    const stream = new Blob([sliced]).stream().pipeThrough(
+      new DecompressionStreamCtor(COMPRESSION_FORMAT)
+    );
+    const response = new Response(stream);
+    return response.text();
+  }
+
+  if (compression === "none") {
+    const decoder = new TextDecoder();
+    return decoder.decode(payload);
+  }
+
+  throw new Error("Unable to decompress bookmark snapshot in this environment");
 }
 
 export async function encryptBookmarkSnapshot(
@@ -146,7 +210,9 @@ export async function encryptBookmarkSnapshot(
   context: BookmarkSnapshotEncryptionContext
 ): Promise<EncryptedBookmarkSnapshotPayload> {
   const serialized = JSON.stringify(snapshot);
-  const compressed = await compress(serialized);
+  const { data: compressed, compression: compressionMethod } = await compress(
+    serialized
+  );
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const key = await deriveKey(context, salt);
@@ -164,7 +230,7 @@ export async function encryptBookmarkSnapshot(
     version: 1,
     kind: "encrypted",
     algorithm: ENCRYPTION_ALGORITHM,
-    compression: COMPRESSION_FORMAT,
+    compression: compressionMethod,
     keySource: context.keySource,
     iv: toBase64(iv),
     salt: toBase64(salt),
@@ -199,6 +265,19 @@ export async function decryptBookmarkSnapshot(
       throw new Error("Unable to decrypt bookmark snapshot with the provided context");
     }
 
+    const compression = payload.compression ?? COMPRESSION_FORMAT;
+
+    if (
+      compression === COMPRESSION_FORMAT &&
+      (!getDecompressionStreamConstructor() ||
+        typeof Blob === "undefined" ||
+        typeof Response === "undefined")
+    ) {
+      throw new Error(
+        "Unable to decrypt bookmark snapshot: gzip compression is not supported in this environment"
+      );
+    }
+
     const iv = fromBase64(payload.iv);
     const salt = fromBase64(payload.salt);
     const ciphertext = fromBase64(payload.ciphertext);
@@ -214,7 +293,10 @@ export async function decryptBookmarkSnapshot(
       toBufferSource(ciphertext)
     );
 
-    const decompressed = await decompress(new Uint8Array(decrypted));
+    const decompressed = await decompress(
+      new Uint8Array(decrypted),
+      compression
+    );
     return JSON.parse(decompressed) as BookmarkSnapshot;
   }
 
