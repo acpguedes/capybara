@@ -1,4 +1,4 @@
-import { Bookmark } from "../../domain/models/bookmark";
+import { Bookmark, BookmarkSource } from "../../domain/models/bookmark";
 
 export interface BookmarkTreeNode {
   id: string;
@@ -11,7 +11,10 @@ export interface BookmarkTreeNode {
   [key: string]: unknown;
 }
 
-export function flattenBookmarkTree(tree: BookmarkTreeNode[]): Bookmark[] {
+export function flattenBookmarkTree(
+  tree: BookmarkTreeNode[],
+  source: BookmarkSource
+): Bookmark[] {
   const bookmarks: Bookmark[] = [];
 
   const visit = (node: BookmarkTreeNode): void => {
@@ -21,7 +24,8 @@ export function flattenBookmarkTree(tree: BookmarkTreeNode[]): Bookmark[] {
         title: node.title ?? "",
         url: node.url,
         tags: collectTags(node),
-        createdAt: toIsoDate(node.dateAdded)
+        createdAt: toIsoDate(node.dateAdded),
+        source
       });
     }
 

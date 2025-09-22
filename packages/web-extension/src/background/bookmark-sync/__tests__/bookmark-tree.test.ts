@@ -41,7 +41,7 @@ describe("flattenBookmarkTree", () => {
       }
     ];
 
-    const bookmarks = flattenBookmarkTree(chromiumTree);
+    const bookmarks = flattenBookmarkTree(chromiumTree, "chromium");
 
     assert.deepStrictEqual(bookmarks, [
       {
@@ -49,14 +49,16 @@ describe("flattenBookmarkTree", () => {
         title: "Example Domain",
         url: "https://example.com",
         tags: [],
-        createdAt: new Date(firstTimestamp).toISOString()
+        createdAt: new Date(firstTimestamp).toISOString(),
+        source: "chromium"
       },
       {
         id: "20",
         title: "MDN Web Docs",
         url: "https://developer.mozilla.org",
         tags: [],
-        createdAt: new Date(secondTimestamp).toISOString()
+        createdAt: new Date(secondTimestamp).toISOString(),
+        source: "chromium"
       }
     ]);
   });
@@ -107,7 +109,7 @@ describe("flattenBookmarkTree", () => {
       }
     ];
 
-    const bookmarks = flattenBookmarkTree(firefoxTree);
+    const bookmarks = flattenBookmarkTree(firefoxTree, "firefox");
 
     assert.deepStrictEqual(bookmarks, [
       {
@@ -115,14 +117,16 @@ describe("flattenBookmarkTree", () => {
         title: "MDN Web Docs",
         url: "https://developer.mozilla.org",
         tags: ["reference", "web"],
-        createdAt: new Date(firstTimestamp).toISOString()
+        createdAt: new Date(firstTimestamp).toISOString(),
+        source: "firefox"
       },
       {
         id: "ff-2",
         title: "Example Domain",
         url: "https://example.com",
         tags: ["general", "samples"],
-        createdAt: new Date(secondTimestamp).toISOString()
+        createdAt: new Date(secondTimestamp).toISOString(),
+        source: "firefox"
       }
     ]);
   });

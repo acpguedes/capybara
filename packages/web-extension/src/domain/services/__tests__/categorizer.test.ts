@@ -11,7 +11,8 @@ describe("categorizeBookmarks", () => {
         title: "A guide to sourdough",
         url: "https://bread.example.com/guide",
         tags: ["baking", "food"],
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -27,7 +28,8 @@ describe("categorizeBookmarks", () => {
         title: "Infrastructure patterns",
         url: "https://engineering.example.org/posts/1",
         tags: [],
-        createdAt: "2024-01-02T00:00:00.000Z"
+        createdAt: "2024-01-02T00:00:00.000Z",
+        source: "firefox"
       }
     ];
 
@@ -43,7 +45,8 @@ describe("categorizeBookmarks", () => {
         title: "Broken link",
         url: "not-a-valid-url",
         tags: [],
-        createdAt: "2024-01-03T00:00:00.000Z"
+        createdAt: "2024-01-03T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 

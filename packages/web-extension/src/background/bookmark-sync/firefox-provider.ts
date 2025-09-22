@@ -1,6 +1,6 @@
-import { Bookmark } from "../../domain/models/bookmark";
 import { BookmarkTreeNode, flattenBookmarkTree } from "./bookmark-tree";
 import { isFirefoxEnvironment } from "./environment";
+import type { BookmarkProviderResult } from "./provider-result";
 
 type BrowserNamespace = {
   bookmarks?: {
@@ -23,40 +23,54 @@ type GlobalWithWebExtensionAPIs = typeof globalThis & {
   navigator?: Navigator;
 };
 
-export async function fetchFirefoxBookmarks(): Promise<Bookmark[]> {
+export async function fetchFirefoxBookmarks(): Promise<BookmarkProviderResult> {
   const globalObject = globalThis as GlobalWithWebExtensionAPIs;
 
   if (!isFirefoxEnvironment(globalObject)) {
-    return [];
+    return { bookmarks: [], availability: "unavailable" };
   }
 
   if (globalObject.browser?.bookmarks?.getTree) {
-    const tree = await globalObject.browser.bookmarks.getTree();
-    return flattenBookmarkTree(tree);
+    try {
+      const tree = await globalObject.browser.bookmarks.getTree();
+      return {
+        bookmarks: flattenBookmarkTree(tree, "firefox"),
+        availability: "success"
+      };
+    } catch (error) {
+      return { bookmarks: [], availability: "unavailable" };
+    }
   }
 
   const chromeNamespace = globalObject.chrome;
   const chromeBookmarks = chromeNamespace?.bookmarks;
 
   if (chromeBookmarks?.getTree) {
-    const tree = await new Promise<BookmarkTreeNode[]>((resolve, reject) => {
-      try {
-        chromeBookmarks.getTree((nodes) => {
-          const errorMessage = chromeNamespace?.runtime?.lastError?.message;
-          if (errorMessage) {
-            reject(new Error(errorMessage));
-            return;
-          }
+    try {
+      const tree = await new Promise<BookmarkTreeNode[]>((resolve, reject) => {
+        try {
+          chromeBookmarks.getTree((nodes) => {
+            const errorMessage = chromeNamespace?.runtime?.lastError?.message;
+            if (errorMessage) {
+              reject(new Error(errorMessage));
+              return;
+            }
 
-          resolve(nodes);
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
+            resolve(nodes);
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
 
-    return flattenBookmarkTree(tree);
+      return {
+        bookmarks: flattenBookmarkTree(tree, "firefox"),
+        availability: "success"
+      };
+    } catch (error) {
+      return { bookmarks: [], availability: "unavailable" };
+    }
   }
 
-  return [];
+  return { bookmarks: [], availability: "unavailable" };
 }

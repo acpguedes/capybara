@@ -19,6 +19,7 @@ import type { Bookmark } from "../../domain/models/bookmark";
 import type { CategorizedBookmark } from "../../domain/models/categorized-bookmark";
 import type { SyncSettings } from "../../domain/models/sync-settings";
 import { RUNTIME_SYNC_NOW_MESSAGE_TYPE } from "../../shared/runtime-messages";
+import type { BookmarkProviderAvailability } from "../bookmark-sync/provider-result";
 function stubSyncSettings(settings: SyncSettings): void {
   setSearchSyncSettingsLoader(async () => settings);
 }
@@ -28,10 +29,18 @@ function stubSynchronizationPipeline(options: {
   firefox: Bookmark[];
   merged: Bookmark[];
   categorized: CategorizedBookmark[];
+  chromiumAvailability?: BookmarkProviderAvailability;
+  firefoxAvailability?: BookmarkProviderAvailability;
 }): () => void {
   setSynchronizeBookmarksDependencies({
-    fetchChromiumBookmarks: async () => options.chromium,
-    fetchFirefoxBookmarks: async () => options.firefox,
+    fetchChromiumBookmarks: async () => ({
+      bookmarks: options.chromium,
+      availability: options.chromiumAvailability ?? "success"
+    }),
+    fetchFirefoxBookmarks: async () => ({
+      bookmarks: options.firefox,
+      availability: options.firefoxAvailability ?? "success"
+    }),
     mergeBookmarks: () => options.merged,
     categorizeBookmarksWithLLM: async () => options.categorized
   });
@@ -227,7 +236,8 @@ describe("synchronizeBookmarks", () => {
         title: "Chromium",
         url: "https://chromium.example",
         tags: ["chromium"],
-        createdAt: "2024-01-01T00:00:00.000Z"
+        createdAt: "2024-01-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -237,7 +247,8 @@ describe("synchronizeBookmarks", () => {
         title: "Firefox",
         url: "https://firefox.example",
         tags: ["firefox"],
-        createdAt: "2024-01-02T00:00:00.000Z"
+        createdAt: "2024-01-02T00:00:00.000Z",
+        source: "firefox"
       }
     ];
 
@@ -296,7 +307,8 @@ describe("synchronizeBookmarks", () => {
         title: "Chromium Docs",
         url: "https://chromium.example/docs",
         tags: ["chromium"],
-        createdAt: "2024-02-01T00:00:00.000Z"
+        createdAt: "2024-02-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -351,7 +363,8 @@ describe("synchronizeBookmarks", () => {
         title: "Chromium Reference",
         url: "https://chromium.example/reference",
         tags: ["chromium"],
-        createdAt: "2024-03-01T00:00:00.000Z"
+        createdAt: "2024-03-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -361,7 +374,8 @@ describe("synchronizeBookmarks", () => {
         title: "Firefox Guide",
         url: "https://firefox.example/guide",
         tags: ["firefox"],
-        createdAt: "2024-03-02T00:00:00.000Z"
+        createdAt: "2024-03-02T00:00:00.000Z",
+        source: "firefox"
       }
     ];
 
@@ -476,7 +490,8 @@ describe("synchronizeBookmarks", () => {
         title: "Chromium Shared",
         url: "https://chromium.shared",
         tags: ["chromium"],
-        createdAt: "2024-04-01T00:00:00.000Z"
+        createdAt: "2024-04-01T00:00:00.000Z",
+        source: "chromium"
       }
     ];
 
@@ -486,7 +501,8 @@ describe("synchronizeBookmarks", () => {
         title: "Firefox Shared",
         url: "https://firefox.shared",
         tags: ["firefox"],
-        createdAt: "2024-04-02T00:00:00.000Z"
+        createdAt: "2024-04-02T00:00:00.000Z",
+        source: "firefox"
       }
     ];
 
@@ -513,8 +529,20 @@ describe("synchronizeBookmarks", () => {
       }
     ];
 
-    const chromiumSequence: Bookmark[][] = [chromiumBookmarks, []];
-    const firefoxSequence: Bookmark[][] = [[], firefoxBookmarks];
+    const chromiumSequence: Array<{
+      bookmarks: Bookmark[];
+      availability: BookmarkProviderAvailability;
+    }> = [
+      { bookmarks: chromiumBookmarks, availability: "success" },
+      { bookmarks: [], availability: "unavailable" }
+    ];
+    const firefoxSequence: Array<{
+      bookmarks: Bookmark[];
+      availability: BookmarkProviderAvailability;
+    }> = [
+      { bookmarks: [], availability: "unavailable" },
+      { bookmarks: firefoxBookmarks, availability: "success" }
+    ];
 
     const mergeResults = [
       [...chromiumBookmarks],
@@ -531,12 +559,20 @@ describe("synchronizeBookmarks", () => {
 
     setSynchronizeBookmarksDependencies({
       fetchChromiumBookmarks: async () => {
-        const current = chromiumSequence[chromiumCall] ?? [];
+        const current =
+          chromiumSequence[chromiumCall] ?? {
+            bookmarks: [],
+            availability: "unavailable" as const
+          };
         chromiumCall += 1;
         return current;
       },
       fetchFirefoxBookmarks: async () => {
-        const current = firefoxSequence[firefoxCall] ?? [];
+        const current =
+          firefoxSequence[firefoxCall] ?? {
+            bookmarks: [],
+            availability: "unavailable" as const
+          };
         firefoxCall += 1;
         return current;
       },
@@ -587,6 +623,160 @@ describe("synchronizeBookmarks", () => {
     assert.deepStrictEqual(persistedSnapshots[1], combinedMerged);
 
     assert.deepStrictEqual(searchBookmarks.query(""), combinedCategorized);
+  });
+
+  it("removes Chromium bookmarks that disappear from later fetches", async () => {
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
+    const chromiumBookmark: Bookmark = {
+      id: "chromium-vanish-1",
+      title: "Chromium Vanish",
+      url: "https://chromium.example/vanish",
+      tags: ["chromium"],
+      createdAt: "2024-05-01T00:00:00.000Z",
+      source: "chromium"
+    };
+
+    const firefoxBookmark: Bookmark = {
+      id: "firefox-keep-1",
+      title: "Firefox Keep",
+      url: "https://firefox.example/keep",
+      tags: ["firefox"],
+      createdAt: "2024-05-02T00:00:00.000Z",
+      source: "firefox"
+    };
+
+    const chromiumResults = [
+      { bookmarks: [chromiumBookmark], availability: "success" as const },
+      { bookmarks: [], availability: "success" as const }
+    ];
+    const firefoxResults = [
+      { bookmarks: [firefoxBookmark], availability: "success" as const },
+      { bookmarks: [firefoxBookmark], availability: "success" as const }
+    ];
+
+    let chromiumCall = 0;
+    let firefoxCall = 0;
+
+    setSynchronizeBookmarksDependencies({
+      fetchChromiumBookmarks: async () => {
+        const result = chromiumResults[chromiumCall] ?? {
+          bookmarks: [],
+          availability: "success" as const
+        };
+        chromiumCall += 1;
+        return result;
+      },
+      fetchFirefoxBookmarks: async () => {
+        const result = firefoxResults[firefoxCall] ?? {
+          bookmarks: [],
+          availability: "success" as const
+        };
+        firefoxCall += 1;
+        return result;
+      },
+      categorizeBookmarksWithLLM: async (bookmarks: Bookmark[]) =>
+        bookmarks.map((bookmark) => ({
+          ...bookmark,
+          category: `category:${bookmark.id}`
+        }))
+    });
+
+    const originalPersist = searchBookmarks.persistSnapshot;
+    const persistedSnapshots: Bookmark[][] = [];
+    searchBookmarks.persistSnapshot = (async () => {
+      persistedSnapshots.push(searchBookmarks.getMergedSnapshot());
+    }) as typeof searchBookmarks.persistSnapshot;
+
+    try {
+      await synchronizeBookmarks();
+      await synchronizeBookmarks();
+    } finally {
+      searchBookmarks.persistSnapshot = originalPersist;
+      resetSynchronizeBookmarksDependencies();
+    }
+
+    assert.strictEqual(persistedSnapshots.length, 2);
+    assert.deepStrictEqual(persistedSnapshots[0], [chromiumBookmark, firefoxBookmark]);
+    assert.deepStrictEqual(persistedSnapshots[1], [firefoxBookmark]);
+    assert.deepStrictEqual(searchBookmarks.getMergedSnapshot(), [firefoxBookmark]);
+  });
+
+  it("removes Firefox bookmarks that disappear from later fetches", async () => {
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
+    const chromiumBookmark: Bookmark = {
+      id: "chromium-keep-1",
+      title: "Chromium Keep",
+      url: "https://chromium.example/keep",
+      tags: ["chromium"],
+      createdAt: "2024-06-01T00:00:00.000Z",
+      source: "chromium"
+    };
+
+    const firefoxBookmark: Bookmark = {
+      id: "firefox-vanish-1",
+      title: "Firefox Vanish",
+      url: "https://firefox.example/vanish",
+      tags: ["firefox"],
+      createdAt: "2024-06-02T00:00:00.000Z",
+      source: "firefox"
+    };
+
+    const chromiumResults = [
+      { bookmarks: [chromiumBookmark], availability: "success" as const },
+      { bookmarks: [chromiumBookmark], availability: "success" as const }
+    ];
+    const firefoxResults = [
+      { bookmarks: [firefoxBookmark], availability: "success" as const },
+      { bookmarks: [], availability: "success" as const }
+    ];
+
+    let chromiumCall = 0;
+    let firefoxCall = 0;
+
+    setSynchronizeBookmarksDependencies({
+      fetchChromiumBookmarks: async () => {
+        const result = chromiumResults[chromiumCall] ?? {
+          bookmarks: [],
+          availability: "success" as const
+        };
+        chromiumCall += 1;
+        return result;
+      },
+      fetchFirefoxBookmarks: async () => {
+        const result = firefoxResults[firefoxCall] ?? {
+          bookmarks: [],
+          availability: "success" as const
+        };
+        firefoxCall += 1;
+        return result;
+      },
+      categorizeBookmarksWithLLM: async (bookmarks: Bookmark[]) =>
+        bookmarks.map((bookmark) => ({
+          ...bookmark,
+          category: `category:${bookmark.id}`
+        }))
+    });
+
+    const originalPersist = searchBookmarks.persistSnapshot;
+    const persistedSnapshots: Bookmark[][] = [];
+    searchBookmarks.persistSnapshot = (async () => {
+      persistedSnapshots.push(searchBookmarks.getMergedSnapshot());
+    }) as typeof searchBookmarks.persistSnapshot;
+
+    try {
+      await synchronizeBookmarks();
+      await synchronizeBookmarks();
+    } finally {
+      searchBookmarks.persistSnapshot = originalPersist;
+      resetSynchronizeBookmarksDependencies();
+    }
+
+    assert.strictEqual(persistedSnapshots.length, 2);
+    assert.deepStrictEqual(persistedSnapshots[0], [chromiumBookmark, firefoxBookmark]);
+    assert.deepStrictEqual(persistedSnapshots[1], [chromiumBookmark]);
+    assert.deepStrictEqual(searchBookmarks.getMergedSnapshot(), [chromiumBookmark]);
   });
 });
 

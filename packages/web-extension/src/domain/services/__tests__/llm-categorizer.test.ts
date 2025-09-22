@@ -21,14 +21,16 @@ const bookmarks: Bookmark[] = [
     title: "Machine Learning Weekly",
     url: "https://ml.example.com/articles/1",
     tags: [],
-    createdAt: "2024-01-01T00:00:00.000Z"
+    createdAt: "2024-01-01T00:00:00.000Z",
+    source: "chromium"
   },
   {
     id: "bookmark-2",
     title: "Cooking with Herbs",
     url: "https://food.example.com/herbs",
     tags: ["cooking"],
-    createdAt: "2024-01-02T00:00:00.000Z"
+    createdAt: "2024-01-02T00:00:00.000Z",
+    source: "firefox"
   }
 ];
 
