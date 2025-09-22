@@ -34,7 +34,7 @@ async function collectEntries() {
 
   for (const candidate of candidates) {
     if (await pathExists(candidate.entryPath)) {
-      const outputKey = candidate.relativePath.replace(/\\.tsx?$/, "");
+      const outputKey = candidate.relativePath.replace(/\.tsx?$/, "");
       entries[outputKey] = candidate.entryPath;
     }
   }
