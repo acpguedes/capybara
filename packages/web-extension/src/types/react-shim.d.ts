@@ -16,6 +16,12 @@ declare module "react" {
   export function useEffect(effect: () => void | (() => void), deps?: ReadonlyArray<unknown>): void;
 
   export function useMemo<T>(factory: () => T, deps: ReadonlyArray<unknown> | undefined): T;
+
+  export interface MutableRefObject<T> {
+    current: T;
+  }
+
+  export function useRef<T>(initialValue: T): MutableRefObject<T>;
 }
 
 declare namespace JSX {
