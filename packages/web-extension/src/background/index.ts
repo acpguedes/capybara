@@ -1,4 +1,7 @@
-import { mergeBookmarks as defaultMergeBookmarks } from "../domain/services/merger";
+import {
+  mergeBookmarks as defaultMergeBookmarks,
+  normalizeBookmarkUrl
+} from "../domain/services/merger";
 import { categorizeBookmarksWithLLM as defaultCategorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
 import { searchBookmarks } from "../domain/services/search";
 import type { Bookmark, BookmarkSource } from "../domain/models/bookmark";
@@ -61,10 +64,14 @@ function combineWithExistingBookmarks(
   }
 
   const combined = [...latest];
-  const seen = new Set(latest.map((bookmark) => bookmark.id));
+  const seen = new Set(
+    latest.map((bookmark) => normalizeBookmarkUrl(bookmark.url))
+  );
 
   for (const bookmark of existing) {
-    if (seen.has(bookmark.id)) {
+    const normalizedUrl = normalizeBookmarkUrl(bookmark.url);
+
+    if (seen.has(normalizedUrl)) {
       continue;
     }
 
@@ -75,6 +82,7 @@ function combineWithExistingBookmarks(
     }
 
     combined.push(bookmark);
+    seen.add(normalizedUrl);
   }
 
   return combined;

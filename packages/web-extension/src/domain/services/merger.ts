@@ -1,15 +1,28 @@
 import { Bookmark } from "../models/bookmark";
 
+export function normalizeBookmarkUrl(url: string): string {
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
+}
+
 export function mergeBookmarks(
   chromium: Bookmark[],
   firefox: Bookmark[]
 ): Bookmark[] {
   const merged = [...chromium];
 
-  const chromiumIds = new Set(chromium.map((bookmark) => bookmark.id));
+  const seenUrls = new Set(
+    chromium.map((bookmark) => normalizeBookmarkUrl(bookmark.url))
+  );
+
   firefox.forEach((bookmark) => {
-    if (!chromiumIds.has(bookmark.id)) {
+    const normalizedUrl = normalizeBookmarkUrl(bookmark.url);
+    if (!seenUrls.has(normalizedUrl)) {
       merged.push(bookmark);
+      seenUrls.add(normalizedUrl);
     }
   });
 
