@@ -15,6 +15,8 @@ type MockPermissions = {
   contains?: (permissions: { origins?: string[] }) => Promise<boolean> | boolean;
 };
 
+type WarnCall = Parameters<typeof console.warn>;
+
 const bookmarks: Bookmark[] = [
   {
     id: "bookmark-1",
@@ -65,7 +67,44 @@ function mockFetch(impl: (...args: MockFetchCall) => Promise<MockResponse>) {
   return { calls };
 }
 
+interface ConsoleWarnMock {
+  calls: WarnCall[];
+}
+
+type ActiveConsoleWarnMock = ConsoleWarnMock & {
+  restore: () => void;
+};
+
+let activeConsoleWarnMock: ActiveConsoleWarnMock | null = null;
+
+function mockConsoleWarn(): ConsoleWarnMock {
+  if (activeConsoleWarnMock) {
+    activeConsoleWarnMock.restore();
+  }
+
+  const originalWarn = console.warn;
+  const calls: WarnCall[] = [];
+  const restore = () => {
+    console.warn = originalWarn;
+  };
+
+  console.warn = ((...args: WarnCall) => {
+    calls.push(args);
+  }) as typeof console.warn;
+
+  const mock: ActiveConsoleWarnMock = {
+    calls,
+    restore
+  };
+
+  activeConsoleWarnMock = mock;
+
+  return mock;
+}
+
 afterEach(() => {
+  activeConsoleWarnMock?.restore();
+  activeConsoleWarnMock = null;
   delete (globalThis as { browser?: unknown }).browser;
   delete (globalThis as { chrome?: unknown }).chrome;
   delete (globalThis as { fetch?: unknown }).fetch;
@@ -129,6 +168,7 @@ describe("categorizeBookmarksWithLLM", () => {
   });
 
   it("falls back to heuristic categories when the feature is disabled", async () => {
+    const warnMock = mockConsoleWarn();
     mockStorage({ enabled: false, endpoint: "https://api.openai.com", apiKey: "token" });
 
     const { calls } = mockFetch(async () => ({
@@ -143,9 +183,11 @@ describe("categorizeBookmarksWithLLM", () => {
       categorized.map((bookmark) => bookmark.category),
       ["example.com", "cooking"]
     );
+    assert.strictEqual(warnMock.calls.length, 0);
   });
 
   it("falls back to heuristic categories when the LLM request fails", async () => {
+    const warnMock = mockConsoleWarn();
     mockStorage({ enabled: true, endpoint: "https://api.openai.com", apiKey: "token" });
 
     const { calls } = mockFetch(async () => ({
@@ -161,9 +203,16 @@ describe("categorizeBookmarksWithLLM", () => {
       categorized.map((bookmark) => bookmark.category),
       ["example.com", "cooking"]
     );
+    assert.strictEqual(warnMock.calls.length, 1);
+    const warnCall = warnMock.calls[0];
+    assert.ok(warnCall);
+    const [message, error] = warnCall;
+    assert.strictEqual(message, "Falling back to heuristic categorizer due to LLM error");
+    assert.ok(error instanceof Error);
   });
 
   it("falls back to heuristic categories when the endpoint URL is invalid", async () => {
+    const warnMock = mockConsoleWarn();
     mockStorage({ enabled: true, endpoint: "not-a-valid-url", apiKey: "token" });
 
     const { calls } = mockFetch(async () => {
@@ -177,9 +226,11 @@ describe("categorizeBookmarksWithLLM", () => {
       categorized.map((bookmark) => bookmark.category),
       ["example.com", "cooking"]
     );
+    assert.strictEqual(warnMock.calls.length, 0);
   });
 
   it("falls back to heuristic categories when host permissions are missing", async () => {
+    const warnMock = mockConsoleWarn();
     const permissionCalls: Array<{ origins?: string[] }> = [];
     mockStorage(
       { enabled: true, endpoint: "https://blocked.example.com/v1", apiKey: "token" },
@@ -204,6 +255,12 @@ describe("categorizeBookmarksWithLLM", () => {
       categorized.map((bookmark) => bookmark.category),
       ["example.com", "cooking"]
     );
+    assert.strictEqual(warnMock.calls.length, 1);
+    const warnCall = warnMock.calls[0];
+    assert.ok(warnCall);
+    const [message, error] = warnCall;
+    assert.strictEqual(message, "Falling back to heuristic categorizer due to LLM error");
+    assert.ok(error instanceof Error);
   });
 
   it("uses heuristic values for bookmarks missing in the LLM response", async () => {
