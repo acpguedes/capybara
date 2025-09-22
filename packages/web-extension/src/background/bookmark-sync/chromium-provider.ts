@@ -1,5 +1,6 @@
 import { Bookmark } from "../../domain/models/bookmark";
 import { BookmarkTreeNode, flattenBookmarkTree } from "./bookmark-tree";
+import { isFirefoxEnvironment } from "./environment";
 
 type BrowserNamespace = {
   bookmarks?: {
@@ -19,10 +20,15 @@ type ChromeNamespace = {
 type GlobalWithWebExtensionAPIs = typeof globalThis & {
   browser?: BrowserNamespace;
   chrome?: ChromeNamespace;
+  navigator?: Navigator;
 };
 
 export async function fetchChromiumBookmarks(): Promise<Bookmark[]> {
   const globalObject = globalThis as GlobalWithWebExtensionAPIs;
+
+  if (isFirefoxEnvironment(globalObject)) {
+    return [];
+  }
 
   if (globalObject.browser?.bookmarks?.getTree) {
     const tree = await globalObject.browser.bookmarks.getTree();

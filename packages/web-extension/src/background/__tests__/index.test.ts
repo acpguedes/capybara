@@ -482,6 +482,137 @@ describe("synchronizeBookmarks", () => {
       snapshot: { merged, categorized }
     });
   });
+
+  it("preserves bookmarks collected from different browsers across consecutive runs", async () => {
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
+    const chromiumBookmarks: Bookmark[] = [
+      {
+        id: "chromium-shared-1",
+        title: "Chromium Shared",
+        url: "https://chromium.shared",
+        tags: ["chromium"],
+        createdAt: "2024-04-01T00:00:00.000Z"
+      }
+    ];
+
+    const firefoxBookmarks: Bookmark[] = [
+      {
+        id: "firefox-shared-1",
+        title: "Firefox Shared",
+        url: "https://firefox.shared",
+        tags: ["firefox"],
+        createdAt: "2024-04-02T00:00:00.000Z"
+      }
+    ];
+
+    const combinedMerged: Bookmark[] = [
+      ...firefoxBookmarks,
+      ...chromiumBookmarks
+    ];
+
+    const chromiumCategorized: CategorizedBookmark[] = [
+      {
+        ...chromiumBookmarks[0],
+        category: "chromium"
+      }
+    ];
+
+    const combinedCategorized: CategorizedBookmark[] = [
+      {
+        ...firefoxBookmarks[0],
+        category: "mozilla"
+      },
+      {
+        ...chromiumBookmarks[0],
+        category: "chromium"
+      }
+    ];
+
+    const chromiumSequence: Bookmark[][] = [chromiumBookmarks, []];
+    const firefoxSequence: Bookmark[][] = [[], firefoxBookmarks];
+
+    const originalChromium = chromiumProvider.fetchChromiumBookmarks;
+    const originalFirefox = firefoxProvider.fetchFirefoxBookmarks;
+    const originalMerge = mergerModule.mergeBookmarks;
+    const originalCategorize = llmCategorizerModule.categorizeBookmarksWithLLM;
+    const originalPersist = searchBookmarks.persistSnapshot;
+
+    let chromiumCall = 0;
+    chromiumProvider.fetchChromiumBookmarks = async () => {
+      const current = chromiumSequence[chromiumCall] ?? [];
+      chromiumCall += 1;
+      return current;
+    };
+
+    let firefoxCall = 0;
+    firefoxProvider.fetchFirefoxBookmarks = async () => {
+      const current = firefoxSequence[firefoxCall] ?? [];
+      firefoxCall += 1;
+      return current;
+    };
+
+    const mergeResults = [
+      [...chromiumBookmarks],
+      [...firefoxBookmarks]
+    ];
+    const mergeCalls: Array<[Bookmark[], Bookmark[]]> = [];
+    let mergeCall = 0;
+    mergerModule.mergeBookmarks = (
+      chromiumInput: Bookmark[],
+      firefoxInput: Bookmark[]
+    ) => {
+      mergeCalls.push([chromiumInput, firefoxInput]);
+      const result = mergeResults[mergeCall] ?? [];
+      mergeCall += 1;
+      return result;
+    };
+
+    const categorizeCalls: Bookmark[][] = [];
+    let categorizeCall = 0;
+    llmCategorizerModule.categorizeBookmarksWithLLM = async (
+      bookmarks: Bookmark[]
+    ) => {
+      categorizeCalls.push([...bookmarks]);
+      if (categorizeCall === 0) {
+        categorizeCall += 1;
+        return chromiumCategorized;
+      }
+
+      categorizeCall += 1;
+      return combinedCategorized;
+    };
+
+    const persistedSnapshots: Bookmark[][] = [];
+    searchBookmarks.persistSnapshot = (async () => {
+      persistedSnapshots.push(searchBookmarks.getMergedSnapshot());
+    }) as typeof searchBookmarks.persistSnapshot;
+
+    try {
+      await synchronizeBookmarks();
+      await synchronizeBookmarks();
+    } finally {
+      chromiumProvider.fetchChromiumBookmarks = originalChromium;
+      firefoxProvider.fetchFirefoxBookmarks = originalFirefox;
+      mergerModule.mergeBookmarks = originalMerge;
+      llmCategorizerModule.categorizeBookmarksWithLLM = originalCategorize;
+      searchBookmarks.persistSnapshot = originalPersist;
+    }
+
+    assert.strictEqual(mergeCalls.length, 2);
+    assert.deepStrictEqual(mergeCalls[0], [chromiumBookmarks, []]);
+    assert.deepStrictEqual(mergeCalls[1], [[], firefoxBookmarks]);
+
+    assert.strictEqual(categorizeCalls.length, 2);
+    assert.deepStrictEqual(categorizeCalls[0], chromiumBookmarks);
+    assert.deepStrictEqual(categorizeCalls[1], combinedMerged);
+
+    assert.strictEqual(persistedSnapshots.length, 2);
+    assert.deepStrictEqual(persistedSnapshots[0], chromiumBookmarks);
+    assert.deepStrictEqual(persistedSnapshots[1], combinedMerged);
+
+    assert.deepStrictEqual(searchBookmarks.query(""), combinedCategorized);
+  });
 });
 
 describe("bootstrapBackground", () => {
