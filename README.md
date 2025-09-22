@@ -40,3 +40,37 @@ A deeper architectural breakdown is available in [`docs/architecture/overview.md
 Detailed guidance lives in the [`docs/`](docs/README.md) directory, covering architecture decisions, synchronization protocol notes, UX expectations, and operational playbooks.
 
 Contributions are welcome—open an issue or pull request describing the problem you are solving, reference the relevant docs, and keep the README up to date as capabilities evolve.
+
+## Docker usage
+
+Run the browser-enabled test environment in Docker when you want an isolated Chromium install or a reproducible CI-like setup.
+
+### Build the image
+
+```bash
+docker compose build
+```
+
+### Execute the test suite
+
+Run the default `npm run test` command inside the container:
+
+```bash
+docker compose run --rm web-extension
+```
+
+To keep the container alive for repeated runs (for example, while debugging against the exposed Chrome DevTools port 9222), start it in attached mode:
+
+```bash
+docker compose up
+```
+
+Test results are streamed to your terminal output. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
+
+For a one-step wrapper, use the optional helper script:
+
+```bash
+./scripts/run-docker-tests.sh
+```
+
+Pass additional arguments to run different commands, e.g., `./scripts/run-docker-tests.sh npm run build`.
