@@ -18,10 +18,10 @@ Design goals:
 
 ## Options Page
 
-The options surface (`Settings` component) currently exposes a single "Enable automatic synchronization" toggle using React state. While the value is not persisted yet, it demonstrates the layout for future preference screens.
+The options surface (`Settings` component) exposes synchronization preferences backed by extension storage. `loadSyncSettings` seeds the toggle state from persisted values, and `saveSyncSettings` writes updates to the browser's local storage area so changes survive popup reloads. With the manifest now wiring `options_ui` to the built page, users can open the settings screen directly from the extension's action menu or details panel.
 
 Enhancements to consider:
 
-- Persist settings to `chrome.storage.sync` so changes roam with the user.
+- Promote settings to `chrome.storage.sync` so preferences roam across devices once the experience stabilizes.
 - Add per-browser include/exclude lists that map to provider configuration.
 - Provide manual refresh and diagnostics actions for support scenarios.

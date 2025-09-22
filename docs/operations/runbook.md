@@ -5,7 +5,7 @@ Capybara is still early in development, so operational practices focus on mainta
 ## Local Development
 
 1. Install dependencies inside `packages/web-extension` with `npm install`.
-2. Use `npm run dev` (add a script when the build tool is introduced) to watch the extension during development.
+2. Run `npm run build` to type-check and bundle assets into `dist/`; keep a second terminal on `node --watch ./scripts/build.mjs` for automatic rebuilds while iterating.
 3. Load the generated extension directory into Chromium-based browsers via the Extensions page in developer mode.
 
 ## Quality Gates
