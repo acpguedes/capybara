@@ -5,13 +5,27 @@ import {
   type BookmarkSnapshot,
   type BookmarkSnapshotStorageValue
 } from "../models/bookmark-snapshot";
-import { loadSyncSettings } from "./sync-settings";
+import { loadSyncSettings as defaultLoadSyncSettings } from "./sync-settings";
 import { getItem, setItem } from "./extension-storage";
 import {
   decryptBookmarkSnapshot,
   encryptBookmarkSnapshot,
   type BookmarkSnapshotEncryptionContext
 } from "./bookmark-snapshot-crypto";
+
+type SyncSettingsLoader = typeof defaultLoadSyncSettings;
+
+let loadSyncSettings: SyncSettingsLoader = defaultLoadSyncSettings;
+
+export function setSearchSyncSettingsLoader(
+  loader: SyncSettingsLoader
+): void {
+  loadSyncSettings = loader;
+}
+
+export function resetSearchSyncSettingsLoader(): void {
+  loadSyncSettings = defaultLoadSyncSettings;
+}
 
 class SearchIndex {
   private items: CategorizedBookmark[] = [];

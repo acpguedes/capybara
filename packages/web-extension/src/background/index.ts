@@ -1,13 +1,46 @@
-import { mergeBookmarks } from "../domain/services/merger";
-import { categorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
+import { mergeBookmarks as defaultMergeBookmarks } from "../domain/services/merger";
+import { categorizeBookmarksWithLLM as defaultCategorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
 import { searchBookmarks } from "../domain/services/search";
 import type { Bookmark } from "../domain/models/bookmark";
-import { fetchChromiumBookmarks } from "./bookmark-sync/chromium-provider";
-import { fetchFirefoxBookmarks } from "./bookmark-sync/firefox-provider";
+import { fetchChromiumBookmarks as defaultFetchChromiumBookmarks } from "./bookmark-sync/chromium-provider";
+import { fetchFirefoxBookmarks as defaultFetchFirefoxBookmarks } from "./bookmark-sync/firefox-provider";
 import { isRuntimeSyncNowMessage } from "../shared/runtime-messages";
 
 export const BOOKMARK_SYNC_ALARM_NAME = "capybara::bookmark-sync";
 export const BOOKMARK_SYNC_ALARM_PERIOD_MINUTES = 30;
+
+type SynchronizeBookmarksDependencies = {
+  fetchChromiumBookmarks: typeof defaultFetchChromiumBookmarks;
+  fetchFirefoxBookmarks: typeof defaultFetchFirefoxBookmarks;
+  mergeBookmarks: typeof defaultMergeBookmarks;
+  categorizeBookmarksWithLLM: typeof defaultCategorizeBookmarksWithLLM;
+};
+
+const defaultSynchronizeBookmarksDependencies: SynchronizeBookmarksDependencies = {
+  fetchChromiumBookmarks: defaultFetchChromiumBookmarks,
+  fetchFirefoxBookmarks: defaultFetchFirefoxBookmarks,
+  mergeBookmarks: defaultMergeBookmarks,
+  categorizeBookmarksWithLLM: defaultCategorizeBookmarksWithLLM
+};
+
+let synchronizeBookmarksDependencies: SynchronizeBookmarksDependencies = {
+  ...defaultSynchronizeBookmarksDependencies
+};
+
+export function setSynchronizeBookmarksDependencies(
+  overrides: Partial<SynchronizeBookmarksDependencies>
+): void {
+  synchronizeBookmarksDependencies = {
+    ...synchronizeBookmarksDependencies,
+    ...overrides
+  };
+}
+
+export function resetSynchronizeBookmarksDependencies(): void {
+  synchronizeBookmarksDependencies = {
+    ...defaultSynchronizeBookmarksDependencies
+  };
+}
 
 function combineWithExistingBookmarks(
   latest: Bookmark[],
@@ -64,6 +97,13 @@ export type BackgroundExtensionAPI = {
 };
 
 export async function synchronizeBookmarks(): Promise<void> {
+  const {
+    fetchChromiumBookmarks,
+    fetchFirefoxBookmarks,
+    mergeBookmarks,
+    categorizeBookmarksWithLLM
+  } = synchronizeBookmarksDependencies;
+
   const [chromiumBookmarks, firefoxBookmarks] = await Promise.all([
     fetchChromiumBookmarks(),
     fetchFirefoxBookmarks()
