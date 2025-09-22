@@ -1,9 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { searchBookmarks } from "../domain/services/search";
 
 export function App(): JSX.Element {
   const [query, setQuery] = useState("");
-  const results = useMemo(() => searchBookmarks.query(query), [query]);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      try {
+        await searchBookmarks.hydrateFromStorage();
+      } finally {
+        if (isMounted) {
+          setHasHydrated(true);
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const results = useMemo(() => searchBookmarks.query(query), [query, hasHydrated]);
 
   return (
     <main>
