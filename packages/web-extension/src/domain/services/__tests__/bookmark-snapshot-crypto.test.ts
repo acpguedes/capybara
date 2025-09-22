@@ -45,7 +45,48 @@ const originalCompressionStream = globalCompression.CompressionStream;
 const originalDecompressionStream = globalCompression.DecompressionStream;
 const extensionGlobals = globalThis as ExtensionGlobals;
 const originalBrowser = extensionGlobals.browser;
-const originalNavigator = extensionGlobals.navigator;
+type NavigatorMockHelper = {
+  navigatorMock: TestNavigator;
+  define(overrides?: Partial<TestNavigator>): void;
+  restore(): void;
+};
+
+function createNavigatorMockHelper(): NavigatorMockHelper {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+
+  const defaults: Required<Pick<TestNavigator, "userAgent" | "platform" | "language">> = {
+    userAgent: "TestBrowser/1.0",
+    platform: "TestOS",
+    language: "en-US"
+  };
+
+  const navigatorMock: TestNavigator = { ...defaults };
+
+  return {
+    navigatorMock,
+    define(overrides: Partial<TestNavigator> = {}) {
+      navigatorMock.userAgent = overrides.userAgent ?? defaults.userAgent;
+      navigatorMock.platform = overrides.platform ?? defaults.platform;
+      navigatorMock.language = overrides.language ?? defaults.language;
+
+      Object.defineProperty(globalThis, "navigator", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: navigatorMock
+      });
+    },
+    restore() {
+      if (originalDescriptor) {
+        Object.defineProperty(globalThis, "navigator", originalDescriptor);
+      } else {
+        delete (globalThis as { navigator?: unknown }).navigator;
+      }
+    }
+  };
+}
+
+const navigatorMockHelper = createNavigatorMockHelper();
 const PLATFORM_SECRET_STORAGE_KEY = "bookmarkSnapshotPlatformSecret";
 
 function createSnapshot(): BookmarkSnapshot {
@@ -79,7 +120,7 @@ afterEach(() => {
   globalCompression.DecompressionStream = originalDecompressionStream;
 
   extensionGlobals.browser = originalBrowser;
-  extensionGlobals.navigator = originalNavigator;
+  navigatorMockHelper.restore();
 });
 
 describe("bookmark snapshot crypto compression handling", () => {
@@ -260,15 +301,16 @@ describe("bookmark snapshot crypto platform secret migration", () => {
       }
     };
 
-    extensionGlobals.navigator = {
+    navigatorMockHelper.define({
       userAgent: "TestBrowser/1.0",
       platform: "TestOS",
       language: "en-US"
-    };
+    });
 
     const snapshot = createSnapshot();
 
-    const legacySecret = `${extensionGlobals.navigator.userAgent ?? ""}::${extensionGlobals.navigator.platform ?? ""}::${extensionGlobals.navigator.language ?? ""}`;
+    const navigatorMock = navigatorMockHelper.navigatorMock;
+    const legacySecret = `${navigatorMock.userAgent ?? ""}::${navigatorMock.platform ?? ""}::${navigatorMock.language ?? ""}`;
 
     const legacyEncrypted = await encryptBookmarkSnapshot(snapshot, {
       keySource: "user",
@@ -297,7 +339,7 @@ describe("bookmark snapshot crypto platform secret migration", () => {
 
     assert.strictEqual(migrated.keySource, "platform");
 
-    extensionGlobals.navigator.userAgent = "TestBrowser/2.0";
+    navigatorMock.userAgent = "TestBrowser/2.0";
 
     const migratedResult = await decryptBookmarkSnapshot(migrated, {
       keySource: "platform"
