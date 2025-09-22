@@ -12,12 +12,28 @@ export interface BookmarkSnapshotEncryptionContext {
   secret?: string;
 }
 
+export interface BookmarkSnapshotDecryptionResult {
+  snapshot: BookmarkSnapshot | null;
+  migratedPayload: EncryptedBookmarkSnapshotPayload | null;
+}
+
 const ENCRYPTION_ALGORITHM = "AES-GCM";
 const COMPRESSION_FORMAT: BookmarkSnapshotCompression = "gzip";
 const KEY_LENGTH = 256;
 const PBKDF2_ITERATIONS = 250_000;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
+const PLATFORM_SECRET_BYTE_LENGTH = 32;
+const PLATFORM_SECRET_STORAGE_KEY = "bookmarkSnapshotPlatformSecret";
+
+type ExtensionStorageArea = {
+  get: (keys: string | string[] | Record<string, unknown>) => Promise<Record<string, unknown>>;
+  set: (items: Record<string, unknown>) => Promise<void>;
+};
+
+type ExtensionGlobals = typeof globalThis & {
+  browser?: { storage?: { local?: ExtensionStorageArea } };
+};
 
 type CompressionStreamConstructor = new (format: string) => {
   readable: ReadableStream<Uint8Array>;
@@ -83,7 +99,26 @@ function fromBase64(value: string): Uint8Array {
   throw new Error("Unable to decode base64");
 }
 
-function getPlatformSecret(): string {
+function resolveExtensionLocalStorage(): ExtensionStorageArea | null {
+  const globals = globalThis as ExtensionGlobals;
+  return globals.browser?.storage?.local ?? null;
+}
+
+async function readStoredPlatformSecret(
+  storage: ExtensionStorageArea
+): Promise<string | null> {
+  const record = await storage.get(PLATFORM_SECRET_STORAGE_KEY);
+  const value = (record ?? {})[PLATFORM_SECRET_STORAGE_KEY];
+
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function generatePlatformSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(PLATFORM_SECRET_BYTE_LENGTH));
+  return toBase64(bytes);
+}
+
+function getLegacyPlatformSecret(): string {
   if (typeof navigator !== "undefined") {
     const platform = navigator.platform ?? "";
     const language = navigator.language ?? "";
@@ -104,24 +139,37 @@ function getPlatformSecret(): string {
   return "capybara::platform";
 }
 
+async function getPlatformSecret(): Promise<string> {
+  const storage = resolveExtensionLocalStorage();
+
+  if (!storage) {
+    return getLegacyPlatformSecret();
+  }
+
+  try {
+    const existing = await readStoredPlatformSecret(storage);
+
+    if (existing) {
+      return existing;
+    }
+
+    const secret = generatePlatformSecret();
+    await storage.set({ [PLATFORM_SECRET_STORAGE_KEY]: secret });
+    return secret;
+  } catch {
+    return getLegacyPlatformSecret();
+  }
+}
+
 function toBufferSource(view: Uint8Array): ArrayBuffer {
   return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
 }
 
-async function deriveKey(
-  context: BookmarkSnapshotEncryptionContext,
+async function deriveKeyFromSecret(
+  secret: string,
   salt: Uint8Array
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
-  const secret =
-    context.keySource === "user"
-      ? context.secret?.trim()
-      : getPlatformSecret();
-
-  if (!secret || secret.length === 0) {
-    throw new Error("Unable to derive encryption key without a secret");
-  }
-
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
@@ -145,6 +193,21 @@ async function deriveKey(
     false,
     ["encrypt", "decrypt"]
   );
+}
+
+async function deriveKey(
+  context: BookmarkSnapshotEncryptionContext,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  const trimmedSecret = context.secret?.trim();
+  const secret =
+    context.keySource === "user" ? trimmedSecret : await getPlatformSecret();
+
+  if (!secret || secret.length === 0) {
+    throw new Error("Unable to derive encryption key without a secret");
+  }
+
+  return deriveKeyFromSecret(secret, salt);
 }
 
 async function compress(
@@ -241,23 +304,23 @@ export async function encryptBookmarkSnapshot(
 export async function decryptBookmarkSnapshot(
   stored: BookmarkSnapshotStorageValue,
   context: BookmarkSnapshotEncryptionContext | null
-): Promise<BookmarkSnapshot | null> {
+): Promise<BookmarkSnapshotDecryptionResult> {
   if (!stored) {
-    return null;
+    return { snapshot: null, migratedPayload: null };
   }
 
   if (!stored || typeof stored !== "object") {
-    return null;
+    return { snapshot: null, migratedPayload: null };
   }
 
   if (!("kind" in stored)) {
-    return stored as BookmarkSnapshot;
+    return { snapshot: stored as BookmarkSnapshot, migratedPayload: null };
   }
 
   const payload = stored as PlainBookmarkSnapshotPayload | EncryptedBookmarkSnapshotPayload;
 
   if (payload.kind === "plain") {
-    return payload.snapshot ?? null;
+    return { snapshot: payload.snapshot ?? null, migratedPayload: null };
   }
 
   if (payload.kind === "encrypted") {
@@ -282,23 +345,56 @@ export async function decryptBookmarkSnapshot(
     const salt = fromBase64(payload.salt);
     const ciphertext = fromBase64(payload.ciphertext);
 
-    const key = await deriveKey(context, salt);
+    let decrypted: ArrayBuffer;
+    let usedLegacyFallback = false;
 
-    const decrypted = await crypto.subtle.decrypt(
-      {
-        name: ENCRYPTION_ALGORITHM,
-        iv: toBufferSource(iv)
-      },
-      key,
-      toBufferSource(ciphertext)
-    );
+    try {
+      const key = await deriveKey(context, salt);
+      decrypted = await crypto.subtle.decrypt(
+        {
+          name: ENCRYPTION_ALGORITHM,
+          iv: toBufferSource(iv)
+        },
+        key,
+        toBufferSource(ciphertext)
+      );
+    } catch (initialError) {
+      if (context.keySource !== "platform") {
+        throw initialError;
+      }
+
+      try {
+        const legacyKey = await deriveKeyFromSecret(getLegacyPlatformSecret(), salt);
+        decrypted = await crypto.subtle.decrypt(
+          {
+            name: ENCRYPTION_ALGORITHM,
+            iv: toBufferSource(iv)
+          },
+          legacyKey,
+          toBufferSource(ciphertext)
+        );
+        usedLegacyFallback = true;
+      } catch {
+        throw initialError;
+      }
+    }
 
     const decompressed = await decompress(
       new Uint8Array(decrypted),
       compression
     );
-    return JSON.parse(decompressed) as BookmarkSnapshot;
+    const snapshot = JSON.parse(decompressed) as BookmarkSnapshot;
+
+    if (usedLegacyFallback) {
+      const migratedPayload = await encryptBookmarkSnapshot(snapshot, {
+        keySource: "platform"
+      });
+
+      return { snapshot, migratedPayload };
+    }
+
+    return { snapshot, migratedPayload: null };
   }
 
-  return null;
+  return { snapshot: null, migratedPayload: null };
 }
