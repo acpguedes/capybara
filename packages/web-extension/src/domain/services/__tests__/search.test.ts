@@ -250,6 +250,9 @@ describe("searchBookmarks storage integration", () => {
       assert.ok(payload);
       assert.strictEqual(payload.kind, "encrypted");
       assert.strictEqual(payload.version, 1);
+      assert.ok(
+        payload.compression === "gzip" || payload.compression === "none"
+      );
       assert.strictEqual(typeof payload.ciphertext, "string");
       assert.ok((payload.ciphertext as string).length > 0);
     }

@@ -9,6 +9,8 @@ export interface BookmarkSnapshot {
 
 export const BOOKMARK_SNAPSHOT_STORAGE_KEY = "bookmarkSnapshot";
 
+export type BookmarkSnapshotCompression = "gzip" | "none";
+
 export interface PlainBookmarkSnapshotPayload {
   version: 1;
   kind: "plain";
@@ -19,7 +21,7 @@ export interface EncryptedBookmarkSnapshotPayload {
   version: 1;
   kind: "encrypted";
   algorithm: "AES-GCM";
-  compression: "gzip";
+  compression: BookmarkSnapshotCompression;
   keySource: SyncKeySource;
   iv: string;
   salt: string;
