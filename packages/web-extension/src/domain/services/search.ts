@@ -33,6 +33,10 @@ class SearchIndex {
     });
   }
 
+  public getMergedSnapshot(): Bookmark[] {
+    return [...this.merged];
+  }
+
   private serialize(): BookmarkSnapshot {
     return {
       merged: [...this.merged],

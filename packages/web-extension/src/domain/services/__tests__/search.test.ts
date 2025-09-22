@@ -85,6 +85,43 @@ describe("searchBookmarks storage integration", () => {
     assert.deepStrictEqual(searchBookmarks.query(""), categorized);
   });
 
+  it("exposes the merged snapshot without sharing references", () => {
+    stubSyncSettings({ enabled: false, keySource: "platform" });
+
+    const merged: Bookmark[] = [
+      {
+        id: "merged-copy-1",
+        title: "Copy Test",
+        url: "https://copy.test",
+        tags: ["copy"],
+        createdAt: "2024-01-01T00:00:00.000Z"
+      }
+    ];
+
+    const categorized: CategorizedBookmark[] = [
+      {
+        ...merged[0],
+        category: "tests"
+      }
+    ];
+
+    searchBookmarks.index(categorized, merged);
+
+    const snapshot = searchBookmarks.getMergedSnapshot();
+    assert.deepStrictEqual(snapshot, merged);
+    assert.ok(snapshot !== merged);
+
+    snapshot.push({
+      id: "merged-copy-2",
+      title: "Mutated",
+      url: "https://mutated.test",
+      tags: ["mutated"],
+      createdAt: "2024-01-02T00:00:00.000Z"
+    });
+
+    assert.deepStrictEqual(searchBookmarks.getMergedSnapshot(), merged);
+  });
+
   it("persists merged and categorized snapshots to local and sync storage", async () => {
     stubSyncSettings({ enabled: false, keySource: "platform" });
 

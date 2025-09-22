@@ -1,12 +1,33 @@
 import { mergeBookmarks } from "../domain/services/merger";
 import { categorizeBookmarksWithLLM } from "../domain/services/llm-categorizer";
 import { searchBookmarks } from "../domain/services/search";
+import type { Bookmark } from "../domain/models/bookmark";
 import { fetchChromiumBookmarks } from "./bookmark-sync/chromium-provider";
 import { fetchFirefoxBookmarks } from "./bookmark-sync/firefox-provider";
 import { isRuntimeSyncNowMessage } from "../shared/runtime-messages";
 
 export const BOOKMARK_SYNC_ALARM_NAME = "capybara::bookmark-sync";
 export const BOOKMARK_SYNC_ALARM_PERIOD_MINUTES = 30;
+
+function combineWithExistingBookmarks(
+  latest: Bookmark[],
+  existing: Bookmark[]
+): Bookmark[] {
+  if (existing.length === 0) {
+    return [...latest];
+  }
+
+  const combined = [...latest];
+  const seen = new Set(latest.map((bookmark) => bookmark.id));
+
+  for (const bookmark of existing) {
+    if (!seen.has(bookmark.id)) {
+      combined.push(bookmark);
+    }
+  }
+
+  return combined;
+}
 
 type RuntimeEvent = {
   addListener: (listener: (...args: unknown[]) => void) => void;
@@ -48,7 +69,10 @@ export async function synchronizeBookmarks(): Promise<void> {
     fetchFirefoxBookmarks()
   ]);
 
-  const merged = mergeBookmarks(chromiumBookmarks, firefoxBookmarks);
+  const latestMerged = mergeBookmarks(chromiumBookmarks, firefoxBookmarks);
+  const existingMerged = searchBookmarks.getMergedSnapshot();
+  const merged = combineWithExistingBookmarks(latestMerged, existingMerged);
+
   const categorized = await categorizeBookmarksWithLLM(merged);
   searchBookmarks.index(categorized, merged);
 
