@@ -531,6 +531,159 @@ describe("synchronizeBookmarks", () => {
     });
   });
 
+  it("deduplicates bookmarks that share a normalized URL across providers", async () => {
+    await backgroundModuleReady;
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
+    const chromiumShared: Bookmark = {
+      id: "chromium-shared",
+      title: "Chromium Shared",
+      url: "https://example.test/shared",
+      tags: ["shared"],
+      createdAt: "2024-04-01T00:00:00.000Z",
+      source: "chromium"
+    };
+
+    const chromiumUnique: Bookmark = {
+      id: "chromium-unique",
+      title: "Chromium Only",
+      url: "https://chromium.test/only",
+      tags: ["chromium"],
+      createdAt: "2024-04-02T00:00:00.000Z",
+      source: "chromium"
+    };
+
+    const firefoxShared: Bookmark = {
+      id: "firefox-shared",
+      title: "Firefox Shared",
+      url: "HTTPS://EXAMPLE.test/shared",
+      tags: ["shared"],
+      createdAt: "2024-04-03T00:00:00.000Z",
+      source: "firefox"
+    };
+
+    const firefoxUnique: Bookmark = {
+      id: "firefox-unique",
+      title: "Firefox Only",
+      url: "https://firefox.test/only",
+      tags: ["firefox"],
+      createdAt: "2024-04-04T00:00:00.000Z",
+      source: "firefox"
+    };
+
+    const categorizeCalls: Bookmark[][] = [];
+
+    setSynchronizeBookmarksDependencies({
+      fetchChromiumBookmarks: async () => ({
+        bookmarks: [chromiumShared, chromiumUnique],
+        availability: "success"
+      }),
+      fetchFirefoxBookmarks: async () => ({
+        bookmarks: [firefoxShared, firefoxUnique],
+        availability: "success"
+      }),
+      categorizeBookmarksWithLLM: async (bookmarks: Bookmark[]) => {
+        categorizeCalls.push(bookmarks);
+        return bookmarks.map((bookmark) => ({
+          ...bookmark,
+          category: `category:${bookmark.id}`
+        }));
+      }
+    });
+
+    const originalPersist = searchBookmarks.persistSnapshot;
+    const persistedSnapshots: Bookmark[][] = [];
+    searchBookmarks.persistSnapshot = (async () => {
+      persistedSnapshots.push(searchBookmarks.getMergedSnapshot());
+    }) as typeof searchBookmarks.persistSnapshot;
+
+    try {
+      await synchronizeBookmarks();
+    } finally {
+      searchBookmarks.persistSnapshot = originalPersist;
+      resetSynchronizeBookmarksDependencies();
+    }
+
+    const expectedMerged = [chromiumShared, chromiumUnique, firefoxUnique];
+
+    assert.deepStrictEqual(categorizeCalls, [expectedMerged]);
+    assert.deepStrictEqual(searchBookmarks.getMergedSnapshot(), expectedMerged);
+    assert.deepStrictEqual(persistedSnapshots, [expectedMerged]);
+  });
+
+  it("preserves unique bookmarks from unavailable providers while deduplicating by URL", async () => {
+    await backgroundModuleReady;
+    stubSyncSettings({ enabled: true, keySource: "platform" });
+
+    const chromiumBookmark: Bookmark = {
+      id: "chromium-latest",
+      title: "Chromium Latest",
+      url: "https://example.test/shared",
+      tags: ["chromium"],
+      createdAt: "2024-04-05T00:00:00.000Z",
+      source: "chromium"
+    };
+
+    const firefoxPreserved: Bookmark = {
+      id: "firefox-preserved",
+      title: "Firefox Preserved",
+      url: "https://firefox.test/preserved",
+      tags: ["firefox"],
+      createdAt: "2024-04-06T00:00:00.000Z",
+      source: "firefox"
+    };
+
+    const firefoxDuplicate: Bookmark = {
+      id: "firefox-duplicate",
+      title: "Firefox Duplicate",
+      url: "HTTPS://EXAMPLE.test/shared",
+      tags: ["firefox"],
+      createdAt: "2024-04-07T00:00:00.000Z",
+      source: "firefox"
+    };
+
+    searchBookmarks.index([], [chromiumBookmark, firefoxPreserved, firefoxDuplicate]);
+
+    const categorizeCalls: Bookmark[][] = [];
+
+    setSynchronizeBookmarksDependencies({
+      fetchChromiumBookmarks: async () => ({
+        bookmarks: [chromiumBookmark],
+        availability: "success"
+      }),
+      fetchFirefoxBookmarks: async () => ({
+        bookmarks: [],
+        availability: "unavailable"
+      }),
+      categorizeBookmarksWithLLM: async (bookmarks: Bookmark[]) => {
+        categorizeCalls.push(bookmarks);
+        return bookmarks.map((bookmark) => ({
+          ...bookmark,
+          category: `category:${bookmark.id}`
+        }));
+      }
+    });
+
+    const originalPersist = searchBookmarks.persistSnapshot;
+    const persistedSnapshots: Bookmark[][] = [];
+    searchBookmarks.persistSnapshot = (async () => {
+      persistedSnapshots.push(searchBookmarks.getMergedSnapshot());
+    }) as typeof searchBookmarks.persistSnapshot;
+
+    try {
+      await synchronizeBookmarks();
+    } finally {
+      searchBookmarks.persistSnapshot = originalPersist;
+      resetSynchronizeBookmarksDependencies();
+    }
+
+    const expectedMerged = [chromiumBookmark, firefoxPreserved];
+
+    assert.deepStrictEqual(categorizeCalls, [expectedMerged]);
+    assert.deepStrictEqual(searchBookmarks.getMergedSnapshot(), expectedMerged);
+    assert.deepStrictEqual(persistedSnapshots, [expectedMerged]);
+  });
+
   it("preserves bookmarks collected from different browsers across consecutive runs", async () => {
     await backgroundModuleReady;
     stubSyncSettings({ enabled: true, keySource: "platform" });
