@@ -27,8 +27,8 @@ const buildEntries = [
     output: path.join(distDirectory, "popup", "index.js")
   },
   {
-    source: path.join(srcDirectory, "options", "settings.tsx"),
-    output: path.join(distDirectory, "options", "settings.js")
+    source: path.join(srcDirectory, "options", "index.tsx"),
+    output: path.join(distDirectory, "options", "index.js")
   }
 ];
 
