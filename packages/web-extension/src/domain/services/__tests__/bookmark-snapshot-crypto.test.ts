@@ -60,28 +60,124 @@ function createNavigatorMockHelper(): NavigatorMockHelper {
     language: "en-US"
   };
 
-  const navigatorMock: TestNavigator = { ...defaults };
+  const canRedefineNavigator =
+    !originalDescriptor ||
+    (originalDescriptor.configurable !== false &&
+      (!("writable" in originalDescriptor) || originalDescriptor.writable !== false));
+
+  function resolveNavigatorFromDescriptor(
+    descriptor: PropertyDescriptor | undefined
+  ): TestNavigator | undefined {
+    if (!descriptor) {
+      return undefined;
+    }
+
+    if ("value" in descriptor) {
+      return descriptor.value as TestNavigator;
+    }
+
+    if (typeof descriptor.get === "function") {
+      return descriptor.get.call(globalThis) as TestNavigator;
+    }
+
+    return undefined;
+  }
+
+  function getCurrentNavigator(): TestNavigator | undefined {
+    return (
+      extensionGlobals.navigator ??
+      resolveNavigatorFromDescriptor(Object.getOwnPropertyDescriptor(globalThis, "navigator")) ??
+      resolveNavigatorFromDescriptor(originalDescriptor)
+    );
+  }
+
+  let activeNavigator: TestNavigator =
+    resolveNavigatorFromDescriptor(originalDescriptor) ?? { ...defaults };
+  let restoreStrategy: "defineProperty" | "mutateExisting" | null = null;
+  let mutatedOriginalValues: Pick<TestNavigator, "userAgent" | "platform" | "language"> | null = null;
 
   return {
-    navigatorMock,
+    get navigatorMock() {
+      return activeNavigator;
+    },
     define(overrides: Partial<TestNavigator> = {}) {
-      navigatorMock.userAgent = overrides.userAgent ?? defaults.userAgent;
-      navigatorMock.platform = overrides.platform ?? defaults.platform;
-      navigatorMock.language = overrides.language ?? defaults.language;
+      const userAgent = overrides.userAgent ?? defaults.userAgent;
+      const platform = overrides.platform ?? defaults.platform;
+      const language = overrides.language ?? defaults.language;
 
-      Object.defineProperty(globalThis, "navigator", {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: navigatorMock
-      });
+      if (canRedefineNavigator) {
+        const navigatorMock: TestNavigator = {
+          ...overrides,
+          userAgent,
+          platform,
+          language
+        };
+
+        Object.defineProperty(globalThis, "navigator", {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: navigatorMock
+        });
+
+        activeNavigator = navigatorMock;
+        restoreStrategy = "defineProperty";
+        mutatedOriginalValues = null;
+        return;
+      }
+
+      const existingNavigator = getCurrentNavigator();
+
+      if (!existingNavigator) {
+        throw new Error("Unable to locate navigator for mutation");
+      }
+
+      if (restoreStrategy !== "mutateExisting" || !mutatedOriginalValues) {
+        mutatedOriginalValues = {
+          userAgent: existingNavigator.userAgent,
+          platform: existingNavigator.platform,
+          language: existingNavigator.language
+        };
+      }
+
+      existingNavigator.userAgent = userAgent;
+      existingNavigator.platform = platform;
+      existingNavigator.language = language;
+
+      activeNavigator = existingNavigator;
+      restoreStrategy = "mutateExisting";
     },
     restore() {
-      if (originalDescriptor) {
+      if (restoreStrategy === "defineProperty") {
+        if (originalDescriptor) {
+          Object.defineProperty(globalThis, "navigator", originalDescriptor);
+          activeNavigator =
+            resolveNavigatorFromDescriptor(originalDescriptor) ?? { ...defaults };
+        } else {
+          delete (globalThis as { navigator?: unknown }).navigator;
+          activeNavigator = { ...defaults };
+        }
+      } else if (restoreStrategy === "mutateExisting") {
+        const existingNavigator = getCurrentNavigator();
+
+        if (existingNavigator && mutatedOriginalValues) {
+          existingNavigator.userAgent = mutatedOriginalValues.userAgent;
+          existingNavigator.platform = mutatedOriginalValues.platform;
+          existingNavigator.language = mutatedOriginalValues.language;
+        }
+
+        activeNavigator = existingNavigator ?? { ...defaults };
+      } else if (originalDescriptor) {
         Object.defineProperty(globalThis, "navigator", originalDescriptor);
+        activeNavigator =
+          resolveNavigatorFromDescriptor(originalDescriptor) ?? { ...defaults };
       } else {
         delete (globalThis as { navigator?: unknown }).navigator;
+        activeNavigator = { ...defaults };
       }
+
+      restoreStrategy = null;
+      mutatedOriginalValues = null;
     }
   };
 }
