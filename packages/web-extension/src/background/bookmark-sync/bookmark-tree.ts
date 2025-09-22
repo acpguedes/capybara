@@ -75,5 +75,14 @@ function collectTags(node: BookmarkTreeNode): string[] {
 
 function toIsoDate(dateAdded?: number): string {
   const timestamp = typeof dateAdded === "number" ? dateAdded : 0;
-  return new Date(timestamp).toISOString();
+  const MICROSECOND_THRESHOLD = 1e12;
+
+  const isMicrosecondTimestamp =
+    timestamp >= MICROSECOND_THRESHOLD && timestamp.toString().length > 13;
+
+  const normalizedTimestamp = isMicrosecondTimestamp
+    ? Math.floor(timestamp / 1000)
+    : timestamp;
+
+  return new Date(normalizedTimestamp).toISOString();
 }

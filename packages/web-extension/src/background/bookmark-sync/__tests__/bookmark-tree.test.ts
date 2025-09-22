@@ -63,6 +63,45 @@ describe("flattenBookmarkTree", () => {
     ]);
   });
 
+  it("normalizes microsecond-based Chromium timestamps", () => {
+    const timestampInMilliseconds = 1716230400000;
+    const timestampInMicroseconds = timestampInMilliseconds * 1000;
+
+    const chromiumTree: BookmarkTreeNode[] = [
+      {
+        id: "0",
+        title: "",
+        children: [
+          {
+            id: "1",
+            title: "Bookmarks bar",
+            children: [
+              {
+                id: "100",
+                title: "Example Domain",
+                url: "https://example.com",
+                dateAdded: timestampInMicroseconds
+              }
+            ]
+          }
+        ]
+      }
+    ];
+
+    const bookmarks = flattenBookmarkTree(chromiumTree, "chromium");
+
+    assert.deepStrictEqual(bookmarks, [
+      {
+        id: "100",
+        title: "Example Domain",
+        url: "https://example.com",
+        tags: [],
+        createdAt: new Date(timestampInMilliseconds).toISOString(),
+        source: "chromium"
+      }
+    ]);
+  });
+
   it("normalizes Firefox bookmark tree payloads", () => {
     const firstTimestamp = 1716403200000;
     const secondTimestamp = 1716489600000;
