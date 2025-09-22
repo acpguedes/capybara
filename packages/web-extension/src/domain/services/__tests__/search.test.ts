@@ -1,7 +1,11 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { searchBookmarks } from "../search";
+import {
+  resetSearchSyncSettingsLoader,
+  searchBookmarks,
+  setSearchSyncSettingsLoader
+} from "../search";
 import { BOOKMARK_SNAPSHOT_STORAGE_KEY } from "../../models/bookmark-snapshot";
 import type { Bookmark } from "../../models/bookmark";
 import type { CategorizedBookmark } from "../../models/categorized-bookmark";
@@ -26,18 +30,15 @@ type ExtensionTestGlobals = typeof globalThis & {
 };
 
 const extensionGlobals = globalThis as ExtensionTestGlobals;
-const syncSettingsModule: any = require("../sync-settings");
-const originalLoadSyncSettings = syncSettingsModule.loadSyncSettings as () => Promise<SyncSettings>;
-
 function stubSyncSettings(settings: SyncSettings): void {
-  syncSettingsModule.loadSyncSettings = async () => settings;
+  setSearchSyncSettingsLoader(async () => settings);
 }
 
 afterEach(() => {
   delete extensionGlobals.browser;
   delete extensionGlobals.chrome;
   searchBookmarks.index([], []);
-  syncSettingsModule.loadSyncSettings = originalLoadSyncSettings;
+  resetSearchSyncSettingsLoader();
 });
 
 describe("searchBookmarks storage integration", () => {
