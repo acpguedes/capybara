@@ -96,8 +96,23 @@ class SearchIndex {
     }
 
     try {
-      const snapshot = await decryptBookmarkSnapshot(storageValue, context);
+      const { snapshot, migratedPayload } = await decryptBookmarkSnapshot(
+        storageValue,
+        context
+      );
       this.deserialize(snapshot);
+
+      if (migratedPayload) {
+        await setItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, migratedPayload, {
+          area: "local"
+        });
+
+        if (settings.enabled) {
+          await setItem(BOOKMARK_SNAPSHOT_STORAGE_KEY, migratedPayload, {
+            area: "sync"
+          });
+        }
+      }
     } catch (error) {
       console.error("Failed to decrypt bookmark snapshot", error);
       this.deserialize(null);

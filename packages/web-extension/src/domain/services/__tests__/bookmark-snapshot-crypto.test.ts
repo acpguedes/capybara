@@ -5,7 +5,10 @@ import {
   decryptBookmarkSnapshot,
   encryptBookmarkSnapshot
 } from "../bookmark-snapshot-crypto";
-import type { BookmarkSnapshot } from "../../models/bookmark-snapshot";
+import type {
+  BookmarkSnapshot,
+  EncryptedBookmarkSnapshotPayload
+} from "../../models/bookmark-snapshot";
 
 type CompressionConstructor = new (format: string) => {
   readable: ReadableStream<Uint8Array>;
@@ -17,6 +20,22 @@ type DecompressionConstructor = new (format: string) => {
   writable: WritableStream<Uint8Array>;
 };
 
+type MockStorageArea = {
+  get: (keys: string | string[] | Record<string, unknown>) => Promise<Record<string, unknown>>;
+  set: (items: Record<string, unknown>) => Promise<void>;
+};
+
+type TestNavigator = Partial<Navigator> & {
+  userAgent?: string;
+  platform?: string;
+  language?: string;
+};
+
+type ExtensionGlobals = Omit<typeof globalThis, "browser" | "navigator"> & {
+  browser?: { storage?: { local?: MockStorageArea } };
+  navigator?: TestNavigator;
+};
+
 const globalCompression = globalThis as {
   CompressionStream?: CompressionConstructor;
   DecompressionStream?: DecompressionConstructor;
@@ -24,6 +43,10 @@ const globalCompression = globalThis as {
 
 const originalCompressionStream = globalCompression.CompressionStream;
 const originalDecompressionStream = globalCompression.DecompressionStream;
+const extensionGlobals = globalThis as ExtensionGlobals;
+const originalBrowser = extensionGlobals.browser;
+const originalNavigator = extensionGlobals.navigator;
+const PLATFORM_SECRET_STORAGE_KEY = "bookmarkSnapshotPlatformSecret";
 
 function createSnapshot(): BookmarkSnapshot {
   return {
@@ -54,6 +77,9 @@ function createSnapshot(): BookmarkSnapshot {
 afterEach(() => {
   globalCompression.CompressionStream = originalCompressionStream;
   globalCompression.DecompressionStream = originalDecompressionStream;
+
+  extensionGlobals.browser = originalBrowser;
+  extensionGlobals.navigator = originalNavigator;
 });
 
 describe("bookmark snapshot crypto compression handling", () => {
@@ -70,12 +96,13 @@ describe("bookmark snapshot crypto compression handling", () => {
 
     assert.strictEqual(encrypted.compression, "none");
 
-    const decrypted = await decryptBookmarkSnapshot(encrypted, {
+    const result = await decryptBookmarkSnapshot(encrypted, {
       keySource: "user",
       secret: "fallback-secret"
     });
 
-    assert.deepStrictEqual(decrypted, snapshot);
+    assert.deepStrictEqual(result.snapshot, snapshot);
+    assert.strictEqual(result.migratedPayload, null);
   });
 
   it("uses native compression streams when they are available", async () => {
@@ -122,11 +149,12 @@ describe("bookmark snapshot crypto compression handling", () => {
 
     assert.strictEqual(encrypted.compression, "gzip");
 
-    const decrypted = await decryptBookmarkSnapshot(encrypted, {
+    const result = await decryptBookmarkSnapshot(encrypted, {
       keySource: "platform"
     });
 
-    assert.deepStrictEqual(decrypted, snapshot);
+    assert.deepStrictEqual(result.snapshot, snapshot);
+    assert.strictEqual(result.migratedPayload, null);
   });
 
   it("fails to decrypt gzip snapshots when decompression support is missing", async () => {
@@ -195,5 +223,88 @@ describe("bookmark snapshot crypto compression handling", () => {
     if (thrown instanceof Error) {
       assert.ok(/gzip compression is not supported/.test(thrown.message));
     }
+  });
+});
+
+describe("bookmark snapshot crypto platform secret migration", () => {
+  it("migrates legacy platform snapshots to a persistent secret", async () => {
+    const storageData: Record<string, unknown> = {};
+
+    extensionGlobals.browser = {
+      storage: {
+        local: {
+          async get(key) {
+            if (typeof key === "string") {
+              if (Object.prototype.hasOwnProperty.call(storageData, key)) {
+                return { [key]: storageData[key] };
+              }
+              return {};
+            }
+
+            if (Array.isArray(key)) {
+              const result: Record<string, unknown> = {};
+              for (const entry of key) {
+                if (Object.prototype.hasOwnProperty.call(storageData, entry)) {
+                  result[entry] = storageData[entry];
+                }
+              }
+              return result;
+            }
+
+            return {};
+          },
+          async set(items) {
+            Object.assign(storageData, items);
+          }
+        }
+      }
+    };
+
+    extensionGlobals.navigator = {
+      userAgent: "TestBrowser/1.0",
+      platform: "TestOS",
+      language: "en-US"
+    };
+
+    const snapshot = createSnapshot();
+
+    const legacySecret = `${extensionGlobals.navigator.userAgent ?? ""}::${extensionGlobals.navigator.platform ?? ""}::${extensionGlobals.navigator.language ?? ""}`;
+
+    const legacyEncrypted = await encryptBookmarkSnapshot(snapshot, {
+      keySource: "user",
+      secret: legacySecret
+    });
+
+    const legacyPayload: EncryptedBookmarkSnapshotPayload = {
+      ...legacyEncrypted,
+      keySource: "platform"
+    };
+
+    const result = await decryptBookmarkSnapshot(legacyPayload, {
+      keySource: "platform"
+    });
+
+    assert.deepStrictEqual(result.snapshot, snapshot);
+
+    const migrated = result.migratedPayload;
+
+    if (!migrated) {
+      throw new Error("expected the snapshot to be re-encrypted with the persistent secret");
+    }
+
+    const storedSecret = storageData[PLATFORM_SECRET_STORAGE_KEY];
+    assert.strictEqual(typeof storedSecret, "string");
+
+    assert.strictEqual(migrated.keySource, "platform");
+
+    extensionGlobals.navigator.userAgent = "TestBrowser/2.0";
+
+    const migratedResult = await decryptBookmarkSnapshot(migrated, {
+      keySource: "platform"
+    });
+
+    assert.deepStrictEqual(migratedResult.snapshot, snapshot);
+    assert.strictEqual(migratedResult.migratedPayload, null);
+    assert.strictEqual(storageData[PLATFORM_SECRET_STORAGE_KEY], storedSecret);
   });
 });

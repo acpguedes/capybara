@@ -250,9 +250,16 @@ describe("searchBookmarks storage integration", () => {
 
     await searchBookmarks.persistSnapshot();
 
-    assert.strictEqual(calls.length, 2);
+    const snapshotCalls = calls.filter((call) => {
+      return Object.prototype.hasOwnProperty.call(
+        call.items,
+        BOOKMARK_SNAPSHOT_STORAGE_KEY
+      );
+    });
 
-    for (const call of calls) {
+    assert.strictEqual(snapshotCalls.length, 2);
+
+    for (const call of snapshotCalls) {
       const payload = call.items[BOOKMARK_SNAPSHOT_STORAGE_KEY] as Record<string, unknown>;
       assert.ok(payload);
       assert.strictEqual(payload.kind, "encrypted");
