@@ -6,6 +6,7 @@ import {
 import { SYNC_SETTINGS_STORAGE_KEY } from "../domain/models/sync-settings";
 import { loadLLMConfiguration, saveLLMConfiguration } from "../domain/services/llm-settings";
 import { loadSyncSettings, saveSyncSettings } from "../domain/services/sync-settings";
+import { ensureHostPermission, getHostPermissionInfo } from "../shared/extension-permissions";
 import { RUNTIME_SYNC_NOW_MESSAGE_TYPE } from "../shared/runtime-messages";
 
 type ExtensionRuntime = {
@@ -48,6 +49,7 @@ export function Settings(): JSX.Element {
   const [llmEndpoint, setLlmEndpoint] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmModel, setLlmModel] = useState("");
+  const [llmError, setLlmError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
@@ -123,13 +125,39 @@ export function Settings(): JSX.Element {
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setSaveStatus("saving");
+    setLlmError(null);
 
     try {
+      const trimmedEndpoint = llmEndpoint.trim();
+      const trimmedApiKey = llmApiKey.trim();
       const trimmedModel = llmModel.trim();
+      let endpointToPersist = trimmedEndpoint;
+
+      if (llmEnabled && trimmedEndpoint.length > 0) {
+        const permissionInfo = getHostPermissionInfo(trimmedEndpoint);
+
+        if (!permissionInfo) {
+          setSaveStatus("error");
+          setLlmError("The endpoint must be a valid HTTPS URL without credentials.");
+          return;
+        }
+
+        const granted = await ensureHostPermission(permissionInfo.pattern);
+        if (!granted) {
+          setSaveStatus("error");
+          setLlmError(
+            `Permission to contact ${permissionInfo.origin} was denied. Allow access and try again.`
+          );
+          return;
+        }
+
+        endpointToPersist = permissionInfo.href;
+      }
+
       await saveLLMConfiguration({
         enabled: llmEnabled,
-        endpoint: llmEndpoint.trim(),
-        apiKey: llmApiKey.trim(),
+        endpoint: endpointToPersist,
+        apiKey: trimmedApiKey,
         model: trimmedModel.length > 0 ? trimmedModel : undefined
       });
 
@@ -137,6 +165,9 @@ export function Settings(): JSX.Element {
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (error) {
       console.error("Failed to persist LLM configuration", error);
+      setLlmError((previous) =>
+        previous ?? "Unable to save settings. Please check the extension console."
+      );
       setSaveStatus("error");
     }
   }
@@ -250,7 +281,9 @@ export function Settings(): JSX.Element {
 
           {saveStatus === "saved" && <p role="status">LLM settings saved.</p>}
           {saveStatus === "error" && (
-            <p role="alert">Unable to save settings. Please check the extension console.</p>
+            <p role="alert">
+              {llmError ?? "Unable to save settings. Please check the extension console."}
+            </p>
           )}
         </form>
         <p>

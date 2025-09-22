@@ -1,6 +1,7 @@
 import type { Bookmark } from "../models/bookmark";
 import type { CategorizedBookmark } from "../models/categorized-bookmark";
 import type { LLMConfiguration } from "../models/llm-configuration";
+import { getHostPermissionInfo, hasHostPermission } from "../../shared/extension-permissions";
 import { categorizeBookmarks } from "./categorizer";
 import { loadLLMConfiguration } from "./llm-settings";
 
@@ -69,6 +70,16 @@ export async function categorizeBookmarksWithLLM(
       return fallbackCategorized;
     }
 
+    const endpointInfo = getHostPermissionInfo(endpoint);
+    if (!endpointInfo) {
+      return fallbackCategorized;
+    }
+
+    const hasPermission = await hasHostPermission(endpointInfo.pattern);
+    if (!hasPermission) {
+      throw new Error(`Missing host permission for ${endpointInfo.origin}`);
+    }
+
     const payload: LLMRequestPayload = {
       bookmarks: bookmarks.map((bookmark) => ({
         id: bookmark.id,
@@ -82,7 +93,7 @@ export async function categorizeBookmarksWithLLM(
       payload.model = configuration.model.trim();
     }
 
-    const response = await fetch(endpoint, {
+    const response = await fetch(endpointInfo.href, {
       method: "POST",
       headers: buildHeaders(configuration),
       body: JSON.stringify(payload)
