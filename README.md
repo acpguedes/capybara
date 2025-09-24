@@ -20,6 +20,13 @@ Deliver a privacy-conscious bookmark hub that mirrors the calm, helpful nature o
 - **Instant search:** Query titles, URLs, and categories entirely client-side via the shared search index.
 - **Friendly UI surfaces:** React-driven popup and options pages keep interactions simple while leaving room for advanced features.
 
+## Branding & Assets
+
+- Browser action and installer icons live in `packages/web-extension/public/icons/`.
+- SVG masters are committed as `icon-16.svg`, `icon-32.svg`, `icon-48.svg`, and `icon-128.svg`; PNG renditions are generated during the build by `packages/web-extension/scripts/generate-icons.mjs` and emitted into `dist/icons`.
+- The build pipeline (`packages/web-extension/scripts/build.mjs`) copies the entire `public` directory into the distributable bundle and then writes the PNG icons so the manifest references stay valid.
+- Run `node ./scripts/generate-icons.mjs` from `packages/web-extension/` to refresh the PNGs manually or to emit them into another directory for testing.
+
 ## Architecture Summary
 
 - **Background sync:** [`packages/web-extension/src/background/index.ts`](packages/web-extension/src/background/index.ts) orchestrates multi-browser synchronization using provider modules under `src/background/bookmark-sync`.
