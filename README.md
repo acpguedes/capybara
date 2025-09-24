@@ -59,13 +59,13 @@ Run the default `npm run test` command inside the container:
 docker compose run --rm web-extension
 ```
 
-To keep the container alive for repeated runs (for example, while debugging against the exposed Chrome DevTools port 9222), start it in attached mode:
+To keep the container alive for repeated runs (for example, while debugging against the exposed Chrome DevTools port 9222), drop into an interactive shell while keeping service ports exposed:
 
 ```bash
-docker compose up
+docker compose run --rm --service-ports web-extension bash
 ```
 
-Test results are streamed to your terminal output. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
+From that shell you can launch Chromium manually (for example, `chromium-browser --remote-debugging-port=9222`) so the DevTools port stays open, or run any npm scripts you need. Command output streams directly to your terminal. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
 
 For a one-step wrapper, use the optional helper script:
 
