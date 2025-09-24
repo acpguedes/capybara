@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc --noEmit --project tsconfig.json && node ./scripts/build.mjs",
+    "package": "node ../../scripts/package-extension.js",
     "verify:jsx": "node ./scripts/verify-jsx-build.mjs",
     "test": "npm run build --silent && tsx --test src/domain/services/__tests__/*.test.ts src/background/bookmark-sync/__tests__/*.test.ts src/background/__tests__/*.test.ts src/options/__tests__/*.test.ts src/popup/__tests__/*.test.ts"
   },
