@@ -65,7 +65,7 @@ To keep the container alive for repeated runs (for example, while debugging agai
 docker compose run --rm --service-ports web-extension bash
 ```
 
-From that shell you can launch Chromium manually—e.g., `chromium-browser --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-allow-origins=*`—so the DevTools port stays open, or run any npm scripts you need. Chromium requires the `--remote-allow-origins=*` flag because connections from the Docker host are not treated as loopback traffic. Command output streams directly to your terminal. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
+From that shell you can launch Chromium manually—e.g., `chromium --no-sandbox --headless=new --disable-gpu --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-allow-origins=*`—so the DevTools port stays open, or run any npm scripts you need. Chromium requires the `--remote-allow-origins=*` flag because connections from the Docker host are not treated as loopback traffic. The container runs Chromium as the root user without an attached display, so disabling the sandbox and forcing headless mode avoids startup failures caused by Chrome refusing to use GPU acceleration or create a UI session under those conditions. Command output streams directly to your terminal. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
 
 For a one-step wrapper, use the optional helper script:
 
