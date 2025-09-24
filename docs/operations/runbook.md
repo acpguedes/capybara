@@ -5,13 +5,14 @@ Capybara is still early in development, so operational practices focus on mainta
 ## Local Development
 
 1. Install dependencies inside `packages/web-extension` with `npm install`.
-2. Run `npm run build && npm run package` to type-check, bundle assets into `dist/`, and create `packages/web-extension/capybara-extension-v<version>.zip`; keep a second terminal on `node --watch ./scripts/build.mjs` for automatic rebuilds while iterating.
-3. Load the generated extension directory into Chromium-based browsers via the Extensions page in developer mode.
+2. Run `npm run lint && npm run test` to execute static analysis and the TypeScript test suite before iterating on manual checks.
+3. Run `npm run build && npm run package` to type-check, bundle assets into `dist/`, and create `packages/web-extension/capybara-extension-v<version>.zip`; keep a second terminal on `node --watch ./scripts/build.mjs` for automatic rebuilds while iterating.
+4. Load the generated extension directory into Chromium-based browsers via the Extensions page in developer mode.
 
 ## Quality Gates
 
+- Run `npm run lint && npm run test` before merging changes to enforce the linting and unit test gates.
 - Unit tests should be colocated with the domain services once their behavior stabilizes.
-- Linting via `eslint` will help enforce React and TypeScript conventions; introduce it before shipping the first public beta.
 - Manual smoke tests must include background sync, popup queries, and options toggles.
 
 ## Release Checklist
