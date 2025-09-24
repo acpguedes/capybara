@@ -61,21 +61,31 @@ docker compose build
 
 ### Execute the test suite
 
-Run the default `npm run test` command inside the container:
+Run the demo server and headless Chromium target with:
 
 ```bash
-docker compose run --rm web-extension
+docker compose up web-extension
 ```
 
-To keep the container alive for repeated runs (for example, while debugging against the exposed Chrome DevTools port 9222), drop into an interactive shell while keeping service ports exposed:
+The container builds the extension bundle, serves the static assets on <http://127.0.0.1:4173>, and launches Chromium in headless mode with remote debugging exposed on port `9222`. Visit <http://127.0.0.1:4173/popup/> for the popup UI or <http://127.0.0.1:4173/options/> for the options screen. To attach your local browser to the headless instance, open `chrome://inspect`, add `127.0.0.1:9222` as a target, and inspect the running context. Chromium logs several DBus warnings at startup inside the container—these are expected because no desktop session is available.
+
+### Execute the test suite
+
+Run the default `npm run test` command inside the container whenever you need the automated checks:
+
+```bash
+docker compose run --rm web-extension npm run test
+```
+
+To keep the container alive for repeated runs or manual inspection, drop into an interactive shell while keeping service ports exposed:
 
 ```bash
 docker compose run --rm --service-ports web-extension bash
 ```
 
-From that shell you can launch Chromium manually—e.g., `chromium --no-sandbox --headless=new --disable-gpu --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222 --remote-allow-origins=*`—so the DevTools port stays open, or run any npm scripts you need. Chromium requires the `--remote-allow-origins=*` flag because connections from the Docker host are not treated as loopback traffic. The container runs Chromium as the root user without an attached display, so disabling the sandbox and forcing headless mode avoids startup failures caused by Chrome refusing to use GPU acceleration or create a UI session under those conditions. Command output streams directly to your terminal. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
+From that shell you can call `npm run demo` to start the preview server and Chromium, run `npm run build` to rebuild the distributable bundle, or execute any other npm script. Repository changes in your local workspace are mounted into the container, so edits on the host are immediately reflected inside Docker.
 
-For a one-step wrapper, use the optional helper script:
+For a one-step wrapper around the test workflow, use the optional helper script:
 
 ```bash
 ./scripts/run-docker-tests.sh

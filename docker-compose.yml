@@ -3,11 +3,12 @@ services:
     build:
       context: .
     working_dir: /usr/src/app/packages/web-extension
-    command: npm run test
+    command: npm run demo
     volumes:
       - .:/usr/src/app
       - node_modules:/usr/src/app/packages/web-extension/node_modules
     ports:
+      - "4173:4173"
       - "9222:9222"
 volumes:
   node_modules:

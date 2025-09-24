@@ -8,6 +8,8 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "package": "node ../../scripts/package-extension.js",
     "verify:jsx": "node ./scripts/verify-jsx-build.mjs",
+    "serve": "node ./scripts/serve.mjs",
+    "demo": "node ./scripts/demo.mjs",
     "test": "npm run build --silent && tsx --test src/domain/services/__tests__/*.test.ts src/background/bookmark-sync/__tests__/*.test.ts src/background/__tests__/*.test.ts src/options/__tests__/*.test.ts src/popup/__tests__/*.test.ts"
   },
   "dependencies": {
