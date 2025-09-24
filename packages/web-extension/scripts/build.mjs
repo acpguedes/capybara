@@ -3,6 +3,7 @@
 import { build } from "esbuild";
 import { rm, mkdir, readdir, stat, copyFile } from "node:fs/promises";
 import path from "node:path";
+import { writeIcons } from "./generate-icons.mjs";
 
 const projectRoot = process.cwd();
 const srcDirectory = path.join(projectRoot, "src");
@@ -115,6 +116,7 @@ async function run() {
   });
 
   await copyPublicAssets();
+  await writeIcons(path.join(distDirectory, "icons"));
 
   console.log(`Bundled ${Object.keys(entryPoints).length} entry point(s) into ${path.relative(projectRoot, distDirectory)}`);
 }

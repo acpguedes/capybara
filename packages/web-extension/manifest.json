@@ -4,7 +4,18 @@
   "version": "0.0.1",
   "description": "Unified bookmarks across browsers with categorization and fast search.",
   "action": {
-    "default_popup": "dist/popup/index.html"
+    "default_popup": "dist/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   },
   "background": {
     "service_worker": "dist/background/index.js"
