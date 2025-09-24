@@ -28,9 +28,6 @@
     "bookmarks",
     "storage"
   ],
-  "host_permissions": [
-    "https://api.openai.com/*"
-  ],
   "optional_host_permissions": [
     "https://*/*"
   ]

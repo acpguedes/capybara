@@ -1,7 +1,7 @@
 import type { Bookmark } from "../models/bookmark";
 import type { CategorizedBookmark } from "../models/categorized-bookmark";
 import type { LLMConfiguration } from "../models/llm-configuration";
-import { getHostPermissionInfo, hasHostPermission } from "../../shared/extension-permissions";
+import { ensureHostPermission, getHostPermissionInfo } from "../../shared/extension-permissions";
 import { categorizeBookmarks } from "./categorizer";
 import { loadLLMConfiguration } from "./llm-settings";
 
@@ -75,7 +75,7 @@ export async function categorizeBookmarksWithLLM(
       return fallbackCategorized;
     }
 
-    const hasPermission = await hasHostPermission(endpointInfo.pattern);
+    const hasPermission = await ensureHostPermission(endpointInfo.pattern);
     if (!hasPermission) {
       throw new Error(`Missing host permission for ${endpointInfo.origin}`);
     }

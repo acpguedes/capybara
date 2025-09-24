@@ -19,6 +19,7 @@ Deliver a privacy-conscious bookmark hub that mirrors the calm, helpful nature o
 - **Automatic organization:** Derive categories from tags or hostnames so similar links cluster together even without manual filing.
 - **Instant search:** Query titles, URLs, and categories entirely client-side via the shared search index.
 - **Friendly UI surfaces:** React-driven popup and options pages keep interactions simple while leaving room for advanced features.
+- **On-demand LLM enrichment:** Host permissions for external LLM endpoints are only requested after you enable the optional categorization feature and provide a URL, keeping the base extension free of third-party access.
 
 ## Branding & Assets
 
