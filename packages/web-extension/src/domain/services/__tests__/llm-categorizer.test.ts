@@ -13,6 +13,12 @@ type MockResponse = {
 
 type MockPermissions = {
   contains?: (permissions: { origins?: string[] }) => Promise<boolean> | boolean;
+  request?: (permissions: { origins?: string[] }) => Promise<boolean> | boolean;
+};
+
+type PermissionCall = {
+  method: "contains" | "request";
+  origins?: string[];
 };
 
 type WarnCall = Parameters<typeof console.warn>;
@@ -112,7 +118,7 @@ afterEach(() => {
 
 describe("categorizeBookmarksWithLLM", () => {
   it("maps LLM responses onto categorized bookmarks", async () => {
-    const permissionCalls: Array<{ origins?: string[] }> = [];
+    const permissionCalls: PermissionCall[] = [];
     mockStorage(
       {
         enabled: true,
@@ -122,7 +128,11 @@ describe("categorizeBookmarksWithLLM", () => {
       },
       {
         contains: async (permissions) => {
-          permissionCalls.push(permissions);
+          permissionCalls.push({ method: "contains", ...permissions });
+          return true;
+        },
+        request: async (permissions) => {
+          permissionCalls.push({ method: "request", ...permissions });
           return true;
         }
       }
@@ -140,7 +150,72 @@ describe("categorizeBookmarksWithLLM", () => {
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
 
-    assert.deepStrictEqual(permissionCalls, [{ origins: ["https://api.openai.com/*"] }]);
+    assert.deepStrictEqual(permissionCalls, [
+      { method: "contains", origins: ["https://api.openai.com/*"] }
+    ]);
+    assert.strictEqual(calls.length, 1);
+    const [url, init] = calls[0];
+    assert.strictEqual(url, "https://api.openai.com/v1/bookmarks");
+    assert.ok(init);
+    assert.strictEqual(init?.method, "POST");
+    assert.deepStrictEqual(init?.headers, {
+      Authorization: "Bearer api-key",
+      "Content-Type": "application/json"
+    });
+
+    const payload = JSON.parse((init?.body ?? "{}") as string) as Record<string, unknown>;
+    assert.ok(Array.isArray(payload.bookmarks));
+    assert.strictEqual(payload.model, "bookmark-model");
+
+    assert.deepStrictEqual(categorized, [
+      {
+        ...bookmarks[0],
+        category: "machine-learning"
+      },
+      {
+        ...bookmarks[1],
+        category: "cooking"
+      }
+    ]);
+  });
+
+  it("requests host permissions when they are not yet granted", async () => {
+    const permissionCalls: PermissionCall[] = [];
+    mockStorage(
+      {
+        enabled: true,
+        endpoint: "https://api.openai.com/v1/bookmarks",
+        apiKey: "api-key",
+        model: "bookmark-model"
+      },
+      {
+        contains: async (permissions) => {
+          permissionCalls.push({ method: "contains", ...permissions });
+          return false;
+        },
+        request: async (permissions) => {
+          permissionCalls.push({ method: "request", ...permissions });
+          return true;
+        }
+      }
+    );
+
+    const { calls } = mockFetch(async () => ({
+      ok: true,
+      json: async () => ({
+        categories: [
+          { id: "bookmark-1", category: "machine-learning" },
+          { id: "bookmark-2", category: "cooking" }
+        ]
+      })
+    }));
+
+    const categorized = await categorizeBookmarksWithLLM(bookmarks);
+
+    assert.deepStrictEqual(permissionCalls, [
+      { method: "contains", origins: ["https://api.openai.com/*"] },
+      { method: "request", origins: ["https://api.openai.com/*"] }
+    ]);
     assert.strictEqual(calls.length, 1);
     const [url, init] = calls[0];
     assert.strictEqual(url, "https://api.openai.com/v1/bookmarks");
@@ -169,7 +244,20 @@ describe("categorizeBookmarksWithLLM", () => {
 
   it("falls back to heuristic categories when the feature is disabled", async () => {
     const warnMock = mockConsoleWarn();
-    mockStorage({ enabled: false, endpoint: "https://api.openai.com", apiKey: "token" });
+    const permissionCalls: PermissionCall[] = [];
+    mockStorage(
+      { enabled: false, endpoint: "https://api.openai.com", apiKey: "token" },
+      {
+        contains: async (permissions) => {
+          permissionCalls.push({ method: "contains", ...permissions });
+          return true;
+        },
+        request: async (permissions) => {
+          permissionCalls.push({ method: "request", ...permissions });
+          return true;
+        }
+      }
+    );
 
     const { calls } = mockFetch(async () => ({
       ok: true,
@@ -178,6 +266,7 @@ describe("categorizeBookmarksWithLLM", () => {
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
 
+    assert.strictEqual(permissionCalls.length, 0);
     assert.strictEqual(calls.length, 0);
     assert.deepStrictEqual(
       categorized.map((bookmark) => bookmark.category),
@@ -213,7 +302,20 @@ describe("categorizeBookmarksWithLLM", () => {
 
   it("falls back to heuristic categories when the endpoint URL is invalid", async () => {
     const warnMock = mockConsoleWarn();
-    mockStorage({ enabled: true, endpoint: "not-a-valid-url", apiKey: "token" });
+    const permissionCalls: PermissionCall[] = [];
+    mockStorage(
+      { enabled: true, endpoint: "not-a-valid-url", apiKey: "token" },
+      {
+        contains: async (permissions) => {
+          permissionCalls.push({ method: "contains", ...permissions });
+          return true;
+        },
+        request: async (permissions) => {
+          permissionCalls.push({ method: "request", ...permissions });
+          return true;
+        }
+      }
+    );
 
     const { calls } = mockFetch(async () => {
       throw new Error("LLM should not be contacted when the endpoint is invalid");
@@ -221,6 +323,7 @@ describe("categorizeBookmarksWithLLM", () => {
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
 
+    assert.strictEqual(permissionCalls.length, 0);
     assert.strictEqual(calls.length, 0);
     assert.deepStrictEqual(
       categorized.map((bookmark) => bookmark.category),
@@ -231,12 +334,16 @@ describe("categorizeBookmarksWithLLM", () => {
 
   it("falls back to heuristic categories when host permissions are missing", async () => {
     const warnMock = mockConsoleWarn();
-    const permissionCalls: Array<{ origins?: string[] }> = [];
+    const permissionCalls: PermissionCall[] = [];
     mockStorage(
       { enabled: true, endpoint: "https://blocked.example.com/v1", apiKey: "token" },
       {
         contains: async (permissions) => {
-          permissionCalls.push(permissions);
+          permissionCalls.push({ method: "contains", ...permissions });
+          return false;
+        },
+        request: async (permissions) => {
+          permissionCalls.push({ method: "request", ...permissions });
           return false;
         }
       }
@@ -248,8 +355,10 @@ describe("categorizeBookmarksWithLLM", () => {
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
 
-    assert.strictEqual(permissionCalls.length, 1);
-    assert.deepStrictEqual(permissionCalls[0]?.origins, ["https://blocked.example.com/*"]);
+    assert.deepStrictEqual(permissionCalls, [
+      { method: "contains", origins: ["https://blocked.example.com/*"] },
+      { method: "request", origins: ["https://blocked.example.com/*"] }
+    ]);
     assert.strictEqual(calls.length, 0);
     assert.deepStrictEqual(
       categorized.map((bookmark) => bookmark.category),
