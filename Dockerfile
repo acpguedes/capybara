@@ -20,5 +20,5 @@ RUN cd packages/web-extension && npm install
 # Default working directory for runtime commands
 WORKDIR /usr/src/app/packages/web-extension
 
-# Run the test suite by default when the container starts
-CMD ["npm", "run", "test"]
+# Run the interactive demo by default when the container starts
+CMD ["npm", "run", "demo"]

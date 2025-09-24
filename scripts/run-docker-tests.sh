@@ -20,5 +20,5 @@ fi
 if [ "$#" -gt 0 ]; then
   exec "${COMPOSE_COMMAND[@]}" -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME" "$@"
 else
-  exec "${COMPOSE_COMMAND[@]}" -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME"
+  exec "${COMPOSE_COMMAND[@]}" -f "$COMPOSE_FILE" run --rm "$SERVICE_NAME" npm run test
 fi
