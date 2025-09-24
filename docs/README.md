@@ -8,3 +8,5 @@ This directory captures the technical plan and operating guides that support the
 - [Operations Playbook](operations/runbook.md)
 
 Each document is intentionally scoped so contributors can evolve the implementation without losing sight of the broader product vision.
+
+When working on the web extension package, install dependencies with `npm install` inside `packages/web-extension/` and commit the resulting `package-lock.json` so collaborators share the same dependency graph.

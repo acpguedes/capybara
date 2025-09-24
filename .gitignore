@@ -1,2 +1,7 @@
+# Dependency directories
 node_modules/
+packages/web-extension/node_modules/
+
+# Build outputs
 packages/web-extension/dist/
+packages/web-extension/.tsbuildinfo

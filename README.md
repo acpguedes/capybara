@@ -39,7 +39,7 @@ A deeper architectural breakdown is available in [`docs/architecture/overview.md
 
 Detailed guidance lives in the [`docs/`](docs/README.md) directory, covering architecture decisions, synchronization protocol notes, UX expectations, and operational playbooks.
 
-Contributions are welcome—open an issue or pull request describing the problem you are solving, reference the relevant docs, and keep the README up to date as capabilities evolve.
+Contributions are welcome—open an issue or pull request describing the problem you are solving, reference the relevant docs, and keep the README up to date as capabilities evolve. When you need to install or update dependencies for the web extension package, run `npm install` from `packages/web-extension/` so the generated `package-lock.json` stays in sync and commit the resulting lockfile alongside your changes.
 
 ## Docker usage
 
