@@ -3,6 +3,12 @@ import {
   LLM_CONFIGURATION_STORAGE_KEY,
   type LLMConfiguration
 } from "../domain/models/llm-configuration";
+import type { LLMProviderType } from "../domain/models/llm-provider";
+import {
+  LLM_PROVIDER_LABELS,
+  DEFAULT_ENDPOINTS,
+  DEFAULT_MODELS
+} from "../domain/models/llm-provider";
 import { SYNC_SETTINGS_STORAGE_KEY } from "../domain/models/sync-settings";
 import { loadLLMConfiguration, saveLLMConfiguration } from "../domain/services/llm-settings";
 import { loadSyncSettings, saveSyncSettings } from "../domain/services/sync-settings";
@@ -39,6 +45,8 @@ function requestImmediateSynchronization(): void {
   }
 }
 
+const PROVIDER_OPTIONS: LLMProviderType[] = ["openai", "anthropic", "gemini", "ollama", "custom"];
+
 export function Settings(): JSX.Element {
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [syncSecret, setSyncSecret] = useState("");
@@ -46,6 +54,7 @@ export function Settings(): JSX.Element {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [llmEnabled, setLlmEnabled] = useState(false);
+  const [llmProvider, setLlmProvider] = useState<LLMProviderType>("openai");
   const [llmEndpoint, setLlmEndpoint] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmModel, setLlmModel] = useState("");
@@ -85,8 +94,10 @@ export function Settings(): JSX.Element {
         applyLLMConfiguration(
           configuration ?? {
             enabled: false,
-            endpoint: "",
-            apiKey: ""
+            provider: "openai" as LLMProviderType,
+            endpoint: DEFAULT_ENDPOINTS.openai,
+            apiKey: "",
+            model: DEFAULT_MODELS.openai
           }
         );
         applySyncSettings(syncSettings);
@@ -97,6 +108,7 @@ export function Settings(): JSX.Element {
 
     function applyLLMConfiguration(configuration: LLMConfiguration): void {
       setLlmEnabled(configuration.enabled);
+      setLlmProvider(configuration.provider ?? "openai");
       setLlmEndpoint(configuration.endpoint ?? "");
       setLlmApiKey(configuration.apiKey ?? "");
       setLlmModel(configuration.model ?? "");
@@ -115,6 +127,13 @@ export function Settings(): JSX.Element {
       active = false;
     };
   }, []);
+
+  function handleProviderChange(newProvider: LLMProviderType): void {
+    setLlmProvider(newProvider);
+    setLlmEndpoint(DEFAULT_ENDPOINTS[newProvider]);
+    setLlmModel(DEFAULT_MODELS[newProvider]);
+    setLlmError(null);
+  }
 
   async function handleSyncSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -161,7 +180,11 @@ export function Settings(): JSX.Element {
 
         if (!permissionInfo) {
           setSaveStatus("error");
-          setLlmError("The endpoint must be a valid HTTPS URL without credentials.");
+          setLlmError(
+            llmProvider === "ollama"
+              ? "The endpoint must be a valid URL (http://localhost or https://)."
+              : "The endpoint must be a valid HTTPS URL without credentials."
+          );
           return;
         }
 
@@ -179,9 +202,10 @@ export function Settings(): JSX.Element {
 
       await saveLLMConfiguration({
         enabled: llmEnabled,
+        provider: llmProvider,
         endpoint: endpointToPersist,
         apiKey: trimmedApiKey,
-        model: trimmedModel.length > 0 ? trimmedModel : undefined
+        model: trimmedModel.length > 0 ? trimmedModel : DEFAULT_MODELS[llmProvider]
       });
 
       setSaveStatus("saved");
@@ -201,6 +225,8 @@ export function Settings(): JSX.Element {
       setSaveStatus("error");
     }
   }
+
+  const isOllama = llmProvider === "ollama";
 
   return (
     <section>
@@ -259,8 +285,9 @@ export function Settings(): JSX.Element {
       <section aria-labelledby="llm-settings-heading">
         <h2 id="llm-settings-heading">LLM Categorization</h2>
         <p>
-          Configure credentials used by the background worker when requesting AI-assisted bookmark
-          categorization.
+          Configure an LLM provider for AI-assisted bookmark categorization. The extension sends
+          bookmark titles, URLs, and tags to the configured provider and receives semantic category
+          assignments. Categories are created dynamically and evolve as your library grows.
         </p>
         <form onSubmit={handleSubmit}>
           <label>
@@ -273,35 +300,53 @@ export function Settings(): JSX.Element {
           </label>
 
           <label>
+            Provider
+            <select
+              value={llmProvider}
+              onChange={(event) =>
+                handleProviderChange(event.target.value as LLMProviderType)
+              }
+            >
+              {PROVIDER_OPTIONS.map((providerKey) => (
+                <option key={providerKey} value={providerKey}>
+                  {LLM_PROVIDER_LABELS[providerKey]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Endpoint
             <input
               type="url"
               value={llmEndpoint}
               onChange={(event) => setLlmEndpoint(event.target.value)}
-              placeholder="https://api.openai.com/v1/bookmarks"
+              placeholder={DEFAULT_ENDPOINTS[llmProvider]}
               required={llmEnabled}
             />
           </label>
 
-          <label>
-            API Key
-            <input
-              type="password"
-              value={llmApiKey}
-              onChange={(event) => setLlmApiKey(event.target.value)}
-              placeholder="sk-..."
-              required={llmEnabled}
-              autoComplete="off"
-            />
-          </label>
+          {!isOllama && (
+            <label>
+              API Key
+              <input
+                type="password"
+                value={llmApiKey}
+                onChange={(event) => setLlmApiKey(event.target.value)}
+                placeholder={llmProvider === "anthropic" ? "sk-ant-..." : "sk-..."}
+                required={llmEnabled}
+                autoComplete="off"
+              />
+            </label>
+          )}
 
           <label>
-            Model (optional)
+            Model
             <input
               type="text"
               value={llmModel}
               onChange={(event) => setLlmModel(event.target.value)}
-              placeholder="gpt-4o-mini"
+              placeholder={DEFAULT_MODELS[llmProvider]}
             />
           </label>
 
@@ -319,7 +364,8 @@ export function Settings(): JSX.Element {
         <p>
           Settings are stored using the browser&apos;s extension storage under the key
           <code>{LLM_CONFIGURATION_STORAGE_KEY}</code> and read by the background worker during
-          synchronization.
+          synchronization. Supported providers: OpenAI, Anthropic (Claude), Google Gemini,
+          Ollama (local), or any OpenAI-compatible custom endpoint.
         </p>
       </section>
     </section>

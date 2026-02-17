@@ -32,6 +32,7 @@ describe("extension storage helpers", () => {
   it("uses chrome storage when the browser namespace is unavailable", async () => {
     const storedConfiguration: LLMConfiguration = {
       enabled: true,
+      provider: "openai",
       endpoint: "https://api.example.com/v1/llm",
       apiKey: "token",
       model: "model-v1"
@@ -103,13 +104,15 @@ describe("extension storage helpers", () => {
 
     assert.deepStrictEqual(loaded, {
       enabled: false,
+      provider: "openai",
       endpoint: "",
       apiKey: "",
-      model: undefined
+      model: ""
     });
 
     const configurationToSave: LLMConfiguration = {
       enabled: true,
+      provider: "openai",
       endpoint: "https://api.example.com/v1/llm",
       apiKey: "token",
       model: "model-v2"

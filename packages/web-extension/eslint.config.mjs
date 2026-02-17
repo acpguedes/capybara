@@ -58,16 +58,16 @@ export default tseslint.config(
         project: "./tsconfig.json",
         tsconfigRootDir: __dirname,
         ecmaFeatures: { jsx: true }
+      },
+      globals: {
+        chrome: "readonly",
+        browser: "readonly"
       }
     },
     settings: {
       react: {
         version: "detect"
       }
-    },
-    globals: {
-      chrome: "readonly",
-      browser: "readonly"
     }
   }
 );

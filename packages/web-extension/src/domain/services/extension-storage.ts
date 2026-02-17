@@ -10,11 +10,16 @@ import {
   SYNC_SETTINGS_STORAGE_KEY,
   type SyncSettings
 } from "../models/sync-settings";
+import {
+  CATEGORIES_STORAGE_KEY,
+  type Category
+} from "../models/category";
 
 type StorageKeyMap = {
   [LLM_CONFIGURATION_STORAGE_KEY]: LLMConfiguration;
   [BOOKMARK_SNAPSHOT_STORAGE_KEY]: BookmarkSnapshotStorageValue;
   [SYNC_SETTINGS_STORAGE_KEY]: SyncSettings;
+  [CATEGORIES_STORAGE_KEY]: Category[];
 };
 
 type StorageKey = keyof StorageKeyMap & string;

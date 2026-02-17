@@ -61,6 +61,13 @@ declare namespace JSX {
       required?: boolean;
       onChange?: (event: import("react").ChangeEvent<HTMLInputElement>) => void;
     };
+    select: BaseProps & {
+      value?: string;
+      onChange?: (event: import("react").ChangeEvent<HTMLSelectElement>) => void;
+    };
+    option: BaseProps & {
+      value?: string;
+    };
     ul: BaseProps;
     li: BaseProps;
     a: BaseProps & {
