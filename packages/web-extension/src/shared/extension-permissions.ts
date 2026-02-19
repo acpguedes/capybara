@@ -74,7 +74,10 @@ export function getHostPermissionInfo(endpoint: string): HostPermissionInfo | nu
   try {
     const url = new URL(trimmed);
 
-    if (url.protocol !== "https:" || !url.hostname || url.hostname.trim().length === 0) {
+    const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    const isAllowedProtocol = url.protocol === "https:" || (url.protocol === "http:" && isLocalhost);
+
+    if (!isAllowedProtocol || !url.hostname || url.hostname.trim().length === 0) {
       return null;
     }
 

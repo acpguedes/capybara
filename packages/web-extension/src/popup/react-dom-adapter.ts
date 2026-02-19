@@ -25,6 +25,7 @@ function resolveImplementation(): ReactDOMLike {
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
     const required = require("react-dom") as
       | ReactDOMLike
       | { default?: ReactDOMLike };

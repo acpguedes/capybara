@@ -25,15 +25,15 @@ declare module "react" {
 }
 
 declare namespace JSX {
-  type Element = any;
+  type Element = object;
   interface ElementClass {}
   interface ElementChildrenAttribute {
-    children: {};
+    children: object;
   }
 
   type BaseProps = {
-    children?: any;
-    [key: string]: any;
+    children?: unknown;
+    [key: string]: unknown;
   };
 
   interface IntrinsicElements {
@@ -61,6 +61,13 @@ declare namespace JSX {
       required?: boolean;
       onChange?: (event: import("react").ChangeEvent<HTMLInputElement>) => void;
     };
+    select: BaseProps & {
+      value?: string;
+      onChange?: (event: import("react").ChangeEvent<HTMLSelectElement>) => void;
+    };
+    option: BaseProps & {
+      value?: string;
+    };
     ul: BaseProps;
     li: BaseProps;
     a: BaseProps & {
@@ -73,7 +80,7 @@ declare namespace JSX {
 }
 
 declare module "react/jsx-runtime" {
-  export const jsx: any;
-  export const jsxs: any;
-  export const Fragment: any;
+  export function jsx(type: unknown, props: Record<string, unknown>, key?: string): JSX.Element;
+  export function jsxs(type: unknown, props: Record<string, unknown>, key?: string): JSX.Element;
+  export const Fragment: symbol;
 }

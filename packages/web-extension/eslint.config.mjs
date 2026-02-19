@@ -58,16 +58,34 @@ export default tseslint.config(
         project: "./tsconfig.json",
         tsconfigRootDir: __dirname,
         ecmaFeatures: { jsx: true }
+      },
+      globals: {
+        chrome: "readonly",
+        browser: "readonly"
       }
     },
     settings: {
       react: {
         version: "detect"
       }
-    },
-    globals: {
-      chrome: "readonly",
-      browser: "readonly"
+    }
+  },
+  {
+    files: ["src/**/__tests__/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/unbound-method": "off",
+      "@typescript-eslint/no-var-requires": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unused-vars": "off"
+    }
+  },
+  {
+    files: ["src/types/**/*.d.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/ban-types": "off"
     }
   }
 );

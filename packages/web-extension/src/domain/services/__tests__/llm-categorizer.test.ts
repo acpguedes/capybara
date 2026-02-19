@@ -9,6 +9,7 @@ type MockResponse = {
   ok: boolean;
   status?: number;
   json: () => Promise<unknown>;
+  text: () => Promise<string>;
 };
 
 type MockPermissions = {
@@ -42,16 +43,33 @@ const bookmarks: Bookmark[] = [
   }
 ];
 
-function mockStorage(configuration: unknown, permissions?: MockPermissions): void {
-  const get = async (): Promise<Record<string, unknown>> => ({
+function mockStorage(
+  configuration: unknown,
+  permissions?: MockPermissions,
+  categories?: unknown
+): void {
+  const storageData: Record<string, unknown> = {
     llmConfiguration: configuration
-  });
+  };
+
+  if (categories !== undefined) {
+    storageData.bookmarkCategories = categories;
+  }
+
+  const get = async (key: string): Promise<Record<string, unknown>> => {
+    if (typeof key === "string" && Object.prototype.hasOwnProperty.call(storageData, key)) {
+      return { [key]: storageData[key] };
+    }
+    return {};
+  };
 
   (globalThis as { browser?: unknown }).browser = {
     storage: {
       local: {
         get,
-        set: async () => {}
+        set: async (items: Record<string, unknown>) => {
+          Object.assign(storageData, items);
+        }
       }
     },
     permissions:
@@ -59,6 +77,19 @@ function mockStorage(configuration: unknown, permissions?: MockPermissions): voi
         contains: async () => true
       }
   };
+}
+
+function createLLMResponse(
+  categorizations: Array<{ id: string; category: string; confidence?: number }>,
+  newCategories?: Array<{ name: string; description: string }>
+): string {
+  return JSON.stringify({
+    categorizations: categorizations.map((c) => ({
+      ...c,
+      confidence: c.confidence ?? 0.9
+    })),
+    newCategories: newCategories ?? []
+  });
 }
 
 function mockFetch(impl: (...args: MockFetchCall) => Promise<MockResponse>) {
@@ -117,14 +148,15 @@ afterEach(() => {
 });
 
 describe("categorizeBookmarksWithLLM", () => {
-  it("maps LLM responses onto categorized bookmarks", async () => {
+  it("maps LLM responses onto categorized bookmarks via OpenAI provider", async () => {
     const permissionCalls: PermissionCall[] = [];
     mockStorage(
       {
         enabled: true,
-        endpoint: "https://api.openai.com/v1/bookmarks",
+        provider: "openai",
+        endpoint: "https://api.openai.com/v1/chat/completions",
         apiKey: "api-key",
-        model: "bookmark-model"
+        model: "gpt-4o-mini"
       },
       {
         contains: async (permissions) => {
@@ -138,14 +170,17 @@ describe("categorizeBookmarksWithLLM", () => {
       }
     );
 
+    const llmResponseContent = createLLMResponse([
+      { id: "bookmark-1", category: "Machine Learning" },
+      { id: "bookmark-2", category: "Cooking" }
+    ]);
+
     const { calls } = mockFetch(async () => ({
       ok: true,
       json: async () => ({
-        categories: [
-          { id: "bookmark-1", category: "machine-learning" },
-          { id: "bookmark-2", category: "cooking" }
-        ]
-      })
+        choices: [{ message: { content: llmResponseContent } }]
+      }),
+      text: async () => ""
     }));
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
@@ -155,27 +190,106 @@ describe("categorizeBookmarksWithLLM", () => {
     ]);
     assert.strictEqual(calls.length, 1);
     const [url, init] = calls[0];
-    assert.strictEqual(url, "https://api.openai.com/v1/bookmarks");
+    assert.strictEqual(url, "https://api.openai.com/v1/chat/completions");
     assert.ok(init);
     assert.strictEqual(init?.method, "POST");
-    assert.deepStrictEqual(init?.headers, {
-      Authorization: "Bearer api-key",
-      "Content-Type": "application/json"
-    });
+
+    const headers = init?.headers as Record<string, string>;
+    assert.strictEqual(headers["Authorization"], "Bearer api-key");
+    assert.strictEqual(headers["Content-Type"], "application/json");
 
     const payload = JSON.parse((init?.body ?? "{}") as string) as Record<string, unknown>;
-    assert.ok(Array.isArray(payload.bookmarks));
-    assert.strictEqual(payload.model, "bookmark-model");
+    assert.strictEqual(payload.model, "gpt-4o-mini");
+    assert.ok(Array.isArray((payload as { messages?: unknown }).messages));
 
     assert.deepStrictEqual(categorized, [
       {
         ...bookmarks[0],
-        category: "machine-learning"
+        category: "Machine Learning"
       },
       {
         ...bookmarks[1],
-        category: "cooking"
+        category: "Cooking"
       }
+    ]);
+  });
+
+  it("maps LLM responses via Anthropic provider", async () => {
+    mockStorage(
+      {
+        enabled: true,
+        provider: "anthropic",
+        endpoint: "https://api.anthropic.com/v1/messages",
+        apiKey: "sk-ant-key",
+        model: "claude-sonnet-4-20250514"
+      }
+    );
+
+    const llmResponseContent = createLLMResponse([
+      { id: "bookmark-1", category: "AI Research" },
+      { id: "bookmark-2", category: "Cooking" }
+    ]);
+
+    const { calls } = mockFetch(async () => ({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: llmResponseContent }]
+      }),
+      text: async () => ""
+    }));
+
+    const categorized = await categorizeBookmarksWithLLM(bookmarks);
+
+    assert.strictEqual(calls.length, 1);
+    const [url, init] = calls[0];
+    assert.strictEqual(url, "https://api.anthropic.com/v1/messages");
+
+    const headers = init?.headers as Record<string, string>;
+    assert.strictEqual(headers["x-api-key"], "sk-ant-key");
+    assert.strictEqual(headers["anthropic-version"], "2023-06-01");
+
+    assert.deepStrictEqual(categorized, [
+      { ...bookmarks[0], category: "AI Research" },
+      { ...bookmarks[1], category: "Cooking" }
+    ]);
+  });
+
+  it("maps LLM responses via Gemini provider", async () => {
+    mockStorage(
+      {
+        enabled: true,
+        provider: "gemini",
+        endpoint: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        apiKey: "gemini-key",
+        model: "gemini-2.0-flash"
+      }
+    );
+
+    const llmResponseContent = createLLMResponse([
+      { id: "bookmark-1", category: "Technology" },
+      { id: "bookmark-2", category: "Recipes" }
+    ]);
+
+    const { calls } = mockFetch(async () => ({
+      ok: true,
+      json: async () => ({
+        candidates: [{
+          content: { parts: [{ text: llmResponseContent }] }
+        }]
+      }),
+      text: async () => ""
+    }));
+
+    const categorized = await categorizeBookmarksWithLLM(bookmarks);
+
+    assert.strictEqual(calls.length, 1);
+    const [url] = calls[0];
+    assert.ok(url.includes("gemini-2.0-flash"));
+    assert.ok(url.includes("key=gemini-key"));
+
+    assert.deepStrictEqual(categorized, [
+      { ...bookmarks[0], category: "Technology" },
+      { ...bookmarks[1], category: "Recipes" }
     ]);
   });
 
@@ -184,9 +298,10 @@ describe("categorizeBookmarksWithLLM", () => {
     mockStorage(
       {
         enabled: true,
-        endpoint: "https://api.openai.com/v1/bookmarks",
+        provider: "openai",
+        endpoint: "https://api.openai.com/v1/chat/completions",
         apiKey: "api-key",
-        model: "bookmark-model"
+        model: "gpt-4o-mini"
       },
       {
         contains: async (permissions) => {
@@ -200,14 +315,17 @@ describe("categorizeBookmarksWithLLM", () => {
       }
     );
 
+    const llmResponseContent = createLLMResponse([
+      { id: "bookmark-1", category: "Machine Learning" },
+      { id: "bookmark-2", category: "Cooking" }
+    ]);
+
     const { calls } = mockFetch(async () => ({
       ok: true,
       json: async () => ({
-        categories: [
-          { id: "bookmark-1", category: "machine-learning" },
-          { id: "bookmark-2", category: "cooking" }
-        ]
-      })
+        choices: [{ message: { content: llmResponseContent } }]
+      }),
+      text: async () => ""
     }));
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
@@ -217,28 +335,10 @@ describe("categorizeBookmarksWithLLM", () => {
       { method: "request", origins: ["https://api.openai.com/*"] }
     ]);
     assert.strictEqual(calls.length, 1);
-    const [url, init] = calls[0];
-    assert.strictEqual(url, "https://api.openai.com/v1/bookmarks");
-    assert.ok(init);
-    assert.strictEqual(init?.method, "POST");
-    assert.deepStrictEqual(init?.headers, {
-      Authorization: "Bearer api-key",
-      "Content-Type": "application/json"
-    });
-
-    const payload = JSON.parse((init?.body ?? "{}") as string) as Record<string, unknown>;
-    assert.ok(Array.isArray(payload.bookmarks));
-    assert.strictEqual(payload.model, "bookmark-model");
 
     assert.deepStrictEqual(categorized, [
-      {
-        ...bookmarks[0],
-        category: "machine-learning"
-      },
-      {
-        ...bookmarks[1],
-        category: "cooking"
-      }
+      { ...bookmarks[0], category: "Machine Learning" },
+      { ...bookmarks[1], category: "Cooking" }
     ]);
   });
 
@@ -246,7 +346,13 @@ describe("categorizeBookmarksWithLLM", () => {
     const warnMock = mockConsoleWarn();
     const permissionCalls: PermissionCall[] = [];
     mockStorage(
-      { enabled: false, endpoint: "https://api.openai.com", apiKey: "token" },
+      {
+        enabled: false,
+        provider: "openai",
+        endpoint: "https://api.openai.com",
+        apiKey: "token",
+        model: "gpt-4o-mini"
+      },
       {
         contains: async (permissions) => {
           permissionCalls.push({ method: "contains", ...permissions });
@@ -261,7 +367,8 @@ describe("categorizeBookmarksWithLLM", () => {
 
     const { calls } = mockFetch(async () => ({
       ok: true,
-      json: async () => ({ categories: [] })
+      json: async () => ({ choices: [] }),
+      text: async () => ""
     }));
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
@@ -277,12 +384,19 @@ describe("categorizeBookmarksWithLLM", () => {
 
   it("falls back to heuristic categories when the LLM request fails", async () => {
     const warnMock = mockConsoleWarn();
-    mockStorage({ enabled: true, endpoint: "https://api.openai.com", apiKey: "token" });
+    mockStorage({
+      enabled: true,
+      provider: "openai",
+      endpoint: "https://api.openai.com/v1/chat/completions",
+      apiKey: "token",
+      model: "gpt-4o-mini"
+    });
 
     const { calls } = mockFetch(async () => ({
       ok: false,
       status: 500,
-      json: async () => ({})
+      json: async () => ({}),
+      text: async () => "Internal Server Error"
     }));
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
@@ -304,7 +418,13 @@ describe("categorizeBookmarksWithLLM", () => {
     const warnMock = mockConsoleWarn();
     const permissionCalls: PermissionCall[] = [];
     mockStorage(
-      { enabled: true, endpoint: "not-a-valid-url", apiKey: "token" },
+      {
+        enabled: true,
+        provider: "openai",
+        endpoint: "not-a-valid-url",
+        apiKey: "token",
+        model: "gpt-4o-mini"
+      },
       {
         contains: async (permissions) => {
           permissionCalls.push({ method: "contains", ...permissions });
@@ -336,7 +456,13 @@ describe("categorizeBookmarksWithLLM", () => {
     const warnMock = mockConsoleWarn();
     const permissionCalls: PermissionCall[] = [];
     mockStorage(
-      { enabled: true, endpoint: "https://blocked.example.com/v1", apiKey: "token" },
+      {
+        enabled: true,
+        provider: "openai",
+        endpoint: "https://blocked.example.com/v1",
+        apiKey: "token",
+        model: "gpt-4o-mini"
+      },
       {
         contains: async (permissions) => {
           permissionCalls.push({ method: "contains", ...permissions });
@@ -373,13 +499,24 @@ describe("categorizeBookmarksWithLLM", () => {
   });
 
   it("uses heuristic values for bookmarks missing in the LLM response", async () => {
-    mockStorage({ enabled: true, endpoint: "https://api.openai.com", apiKey: "token" });
+    mockStorage({
+      enabled: true,
+      provider: "openai",
+      endpoint: "https://api.openai.com/v1/chat/completions",
+      apiKey: "token",
+      model: "gpt-4o-mini"
+    });
+
+    const llmResponseContent = createLLMResponse([
+      { id: "bookmark-1", category: "AI" }
+    ]);
 
     mockFetch(async () => ({
       ok: true,
       json: async () => ({
-        categories: [{ id: "bookmark-1", category: "ai" }]
-      })
+        choices: [{ message: { content: llmResponseContent } }]
+      }),
+      text: async () => ""
     }));
 
     const categorized = await categorizeBookmarksWithLLM(bookmarks);
@@ -387,12 +524,111 @@ describe("categorizeBookmarksWithLLM", () => {
     assert.deepStrictEqual(categorized, [
       {
         ...bookmarks[0],
-        category: "ai"
+        category: "AI"
       },
       {
         ...bookmarks[1],
         category: "cooking"
       }
     ]);
+  });
+
+  it("persists new categories discovered by the LLM", async () => {
+    const storageWrites: Record<string, unknown>[] = [];
+    const storageData: Record<string, unknown> = {
+      llmConfiguration: {
+        enabled: true,
+        provider: "openai",
+        endpoint: "https://api.openai.com/v1/chat/completions",
+        apiKey: "token",
+        model: "gpt-4o-mini"
+      }
+    };
+
+    (globalThis as { browser?: unknown }).browser = {
+      storage: {
+        local: {
+          get: async (key: string) => {
+            if (typeof key === "string" && Object.prototype.hasOwnProperty.call(storageData, key)) {
+              return { [key]: storageData[key] };
+            }
+            return {};
+          },
+          set: async (items: Record<string, unknown>) => {
+            storageWrites.push({ ...items });
+            Object.assign(storageData, items);
+          }
+        }
+      },
+      permissions: { contains: async () => true }
+    };
+
+    const llmResponseContent = JSON.stringify({
+      categorizations: [
+        { id: "bookmark-1", category: "AI Research", confidence: 0.95 },
+        { id: "bookmark-2", category: "Cooking", confidence: 0.9 }
+      ],
+      newCategories: [
+        { name: "AI Research", description: "Artificial intelligence and machine learning research" },
+        { name: "Cooking", description: "Recipes and culinary techniques" }
+      ]
+    });
+
+    mockFetch(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: llmResponseContent } }]
+      }),
+      text: async () => ""
+    }));
+
+    const categorized = await categorizeBookmarksWithLLM(bookmarks);
+
+    assert.strictEqual(categorized[0].category, "AI Research");
+    assert.strictEqual(categorized[1].category, "Cooking");
+
+    const categoryWrite = storageWrites.find((w) =>
+      Object.prototype.hasOwnProperty.call(w, "bookmarkCategories")
+    );
+    assert.ok(categoryWrite, "Should have written categories to storage");
+    const savedCategories = categoryWrite!.bookmarkCategories as Array<{ name: string }>;
+    assert.ok(Array.isArray(savedCategories));
+    assert.ok(savedCategories.some((c) => c.name === "AI Research"));
+    assert.ok(savedCategories.some((c) => c.name === "Cooking"));
+  });
+
+  it("allows http://localhost endpoints for Ollama provider", async () => {
+    mockStorage(
+      {
+        enabled: true,
+        provider: "ollama",
+        endpoint: "http://localhost:11434/v1/chat/completions",
+        apiKey: "",
+        model: "llama3.2"
+      },
+      { contains: async () => true }
+    );
+
+    const llmResponseContent = createLLMResponse([
+      { id: "bookmark-1", category: "Technology" },
+      { id: "bookmark-2", category: "Food" }
+    ]);
+
+    const { calls } = mockFetch(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: llmResponseContent } }]
+      }),
+      text: async () => ""
+    }));
+
+    const categorized = await categorizeBookmarksWithLLM(bookmarks);
+
+    assert.strictEqual(calls.length, 1);
+    const [url] = calls[0];
+    assert.strictEqual(url, "http://localhost:11434/v1/chat/completions");
+
+    assert.strictEqual(categorized[0].category, "Technology");
+    assert.strictEqual(categorized[1].category, "Food");
   });
 });

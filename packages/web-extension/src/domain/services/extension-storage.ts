@@ -10,14 +10,19 @@ import {
   SYNC_SETTINGS_STORAGE_KEY,
   type SyncSettings
 } from "../models/sync-settings";
+import {
+  CATEGORIES_STORAGE_KEY,
+  type Category
+} from "../models/category";
 
 type StorageKeyMap = {
   [LLM_CONFIGURATION_STORAGE_KEY]: LLMConfiguration;
   [BOOKMARK_SNAPSHOT_STORAGE_KEY]: BookmarkSnapshotStorageValue;
   [SYNC_SETTINGS_STORAGE_KEY]: SyncSettings;
+  [CATEGORIES_STORAGE_KEY]: Category[];
 };
 
-type StorageKey = keyof StorageKeyMap & string;
+type StorageKey = keyof StorageKeyMap;
 
 type StorageValue<K extends StorageKey> = StorageKeyMap[K];
 
@@ -84,7 +89,7 @@ export async function getItem<K extends StorageKey>(
 
   for (const storage of storageAreas) {
     const result = await storage.get(key);
-    const record = (result ?? {}) as Record<string, unknown>;
+    const record = result ?? {};
 
     if (Object.prototype.hasOwnProperty.call(record, key)) {
       const value = record[key] ?? null;

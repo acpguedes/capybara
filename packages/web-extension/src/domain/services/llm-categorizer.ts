@@ -4,48 +4,50 @@ import type { LLMConfiguration } from "../models/llm-configuration";
 import { ensureHostPermission, getHostPermissionInfo } from "../../shared/extension-permissions";
 import { categorizeBookmarks } from "./categorizer";
 import { loadLLMConfiguration } from "./llm-settings";
+import { createLLMProvider } from "./llm-providers/provider-factory";
+import {
+  buildCategorizationPrompt,
+  parseCategorizationResponse,
+  batchBookmarks
+} from "./llm-prompt";
+import { loadCategories, addNewCategories } from "./category-store";
 
-interface LLMRequestPayload {
-  bookmarks: Array<Pick<Bookmark, "id" | "title" | "url" | "tags">>;
-  model?: string;
-}
+async function categorizeBatchWithLLM(
+  bookmarks: Bookmark[],
+  configuration: LLMConfiguration
+): Promise<Map<string, string>> {
+  const provider = createLLMProvider(configuration);
+  const existingCategories = await loadCategories();
 
-interface LLMResponsePayload {
-  categories: Array<{ id: string; category: string }>;
-}
+  const { systemPrompt, userMessage } = buildCategorizationPrompt(
+    bookmarks,
+    existingCategories
+  );
 
-function buildHeaders(configuration: LLMConfiguration): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json"
-  };
-
-  const apiKey = configuration.apiKey.trim();
-  if (apiKey.length > 0) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  return headers;
-}
-
-function parseResponse(payload: unknown): LLMResponsePayload | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const value = payload as Partial<LLMResponsePayload>;
-  if (!Array.isArray(value.categories)) {
-    return null;
-  }
-
-  const categories = value.categories.filter((item): item is { id: string; category: string } => {
-    return Boolean(item) && typeof item.id === "string" && typeof item.category === "string";
+  const response = await provider.complete({
+    systemPrompt,
+    userMessage,
+    temperature: 0.3,
+    maxTokens: 4096
   });
 
-  if (categories.length === 0) {
-    return null;
+  const parsed = parseCategorizationResponse(response.content);
+  if (!parsed) {
+    throw new Error("LLM response could not be parsed as categorization data");
   }
 
-  return { categories };
+  if (parsed.newCategories.length > 0) {
+    await addNewCategories(parsed.newCategories);
+  }
+
+  const categoryMap = new Map<string, string>();
+  for (const item of parsed.categorizations) {
+    if (item.category.trim().length > 0) {
+      categoryMap.set(item.id, item.category);
+    }
+  }
+
+  return categoryMap;
 }
 
 export async function categorizeBookmarksWithLLM(
@@ -64,9 +66,10 @@ export async function categorizeBookmarksWithLLM(
     }
 
     const endpoint = configuration.endpoint.trim();
-    const apiKey = configuration.apiKey.trim();
+    const hasCredentials = configuration.provider === "ollama" ||
+      configuration.apiKey.trim().length > 0;
 
-    if (!configuration.enabled || endpoint.length === 0 || apiKey.length === 0) {
+    if (!configuration.enabled || endpoint.length === 0 || !hasCredentials) {
       return fallbackCategorized;
     }
 
@@ -80,43 +83,23 @@ export async function categorizeBookmarksWithLLM(
       throw new Error(`Missing host permission for ${endpointInfo.origin}`);
     }
 
-    const payload: LLMRequestPayload = {
-      bookmarks: bookmarks.map((bookmark) => ({
-        id: bookmark.id,
-        title: bookmark.title,
-        url: bookmark.url,
-        tags: bookmark.tags
-      }))
-    };
+    const batches = batchBookmarks(bookmarks);
+    const allCategoryMappings = new Map<string, string>();
 
-    if (configuration.model && configuration.model.trim().length > 0) {
-      payload.model = configuration.model.trim();
+    for (const batch of batches) {
+      const batchMappings = await categorizeBatchWithLLM(batch, configuration);
+      for (const [id, category] of batchMappings) {
+        allCategoryMappings.set(id, category);
+      }
     }
-
-    const response = await fetch(endpointInfo.href, {
-      method: "POST",
-      headers: buildHeaders(configuration),
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      throw new Error(`LLM request failed with status ${response.status}`);
-    }
-
-    const parsed = parseResponse(await response.json());
-    if (!parsed) {
-      throw new Error("LLM response payload was malformed");
-    }
-
-    const categoryById = new Map(parsed.categories.map((item) => [item.id, item.category]));
 
     return fallbackCategorized.map((bookmark) => {
-      const category = categoryById.get(bookmark.id);
-      if (!category || category.trim().length === 0) {
+      const llmCategory = allCategoryMappings.get(bookmark.id);
+      if (!llmCategory || llmCategory.trim().length === 0) {
         return bookmark;
       }
 
-      return { ...bookmark, category };
+      return { ...bookmark, category: llmCategory };
     });
   } catch (error) {
     console.warn("Falling back to heuristic categorizer due to LLM error", error);
