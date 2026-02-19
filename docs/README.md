@@ -2,6 +2,14 @@
 
 This directory captures the technical plan and operating guides that support the Capybara browser extension. Start with the architecture overview, then dive into the synchronization protocol, UX standards, and operational runbooks as needed.
 
+## Getting Started
+
+- [Environment Setup](setup/environment.md) -- prerequisites, installation, and first build
+- [Development Workflow](setup/development-workflow.md) -- daily commands, testing, and conventions
+- [Troubleshooting](setup/troubleshooting.md) -- common issues and solutions
+
+## Reference
+
 - [Architecture Overview](architecture/overview.md)
 - [LLM Configuration Guide](configuration/llm-setup.md)
 - [Synchronization Protocol](sync/protocol.md)
