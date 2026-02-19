@@ -101,77 +101,197 @@ After evaluating SQLite WASM, PouchDB+CouchDB, Firebase, Supabase, and raw Index
 
 ## Schema Design
 
+### Enums and Value Types
+
+```typescript
+// ===== BOOKMARK STATUS (lifecycle) =====
+// Tracks the user-facing state of a bookmark in the library.
+type BookmarkStatus =
+  | "active"       // Normal state — visible in search, synced
+  | "archived"     // User chose to hide it but keep the data
+  | "removed";     // User deleted it — soft-deleted for sync propagation
+
+// ===== LINK STATUS (health check) =====
+// Tracks whether the destination URL is still reachable.
+type LinkStatus =
+  | "unchecked"    // Never validated (default for new imports)
+  | "alive"        // Last check returned HTTP 2xx
+  | "redirected"   // Last check returned HTTP 3xx (final URL stored in linkFinalUrl)
+  | "broken"       // Last check returned HTTP 4xx/5xx or network error
+  | "timeout";     // Last check timed out
+
+// ===== CLASSIFICATION SOURCE =====
+// Who assigned the value — affects trust/priority in conflict resolution.
+type ClassificationSource =
+  | "user"         // Explicitly set by the user (highest trust)
+  | "llm"          // Assigned by AI categorization
+  | "heuristic";   // Derived from tags or hostname (lowest trust)
+
+// ===== CATEGORY STATUS =====
+type CategoryStatus =
+  | "active"       // In use, appears in filters and suggestions
+  | "archived"     // Hidden from UI but bookmarks retain the reference
+  | "merged";      // Replaced by another category (see mergedIntoCategoryId)
+```
+
 ### Tables
 
 ```typescript
-// ===== BOOKMARKS =====
+// ═══════════════════════════════════════════════════════════════
+// BOOKMARKS — the central record for each saved URL
+// ═══════════════════════════════════════════════════════════════
 interface BookmarkRecord {
   id: string;                     // Deterministic hash of normalized URL
-  url: string;                    // Normalized URL
+  url: string;                    // Normalized canonical URL
   title: string;
   description: string;            // User or AI-generated description
+  notes: string;                  // Free-form user notes (always user-authored)
+  favicon: string;                // Cached favicon URL or data-URI
 
-  // Classification
-  tags: string[];                 // User-assigned tags
-  categoryId: string;             // FK → categories.id
-  categorySource: "user" | "llm" | "heuristic";
+  // ── Status & lifecycle ──
+  status: BookmarkStatus;         // "active" | "archived" | "removed"
+  linkStatus: LinkStatus;         // "unchecked" | "alive" | "redirected" | "broken" | "timeout"
+  linkFinalUrl: string | null;    // If redirected, the resolved destination
+  linkStatusCode: number | null;  // HTTP status code from last check (200, 301, 404…)
 
-  // Provenance
-  sourceBrowsers: string[];       // ["chromium", "firefox"] — multi-source
-  sourceBookmarkIds: string[];    // Original browser bookmark IDs
+  // ── Classification ──
+  tags: string[];                 // User-assigned tags (free-form)
+  categoryId: string | null;      // FK → categories.id (null = uncategorized)
+  categorySource: ClassificationSource;
+  categoryConfidence: number | null; // 0.0–1.0, set by LLM, null for user/heuristic
 
-  // Timestamps
-  createdAt: string;              // ISO 8601
-  updatedAt: string;
-  syncedAt: string | null;        // Last successful cloud sync
+  // ── Provenance ──
+  sourceBrowsers: string[];       // ["chromium", "firefox"] — which browsers had it
+  sourceBookmarkIds: string[];    // Original browser bookmark IDs (parallel to sourceBrowsers)
+  importedFrom: string | null;    // "chromium" | "firefox" | "import-file" | null
 
-  // Sync metadata
-  _rev: number;                   // Monotonic revision counter
-  _deleted: boolean;              // Soft delete for sync tombstones
+  // ── Timestamps (all ISO 8601) ──
+  createdAt: string;              // When first discovered/imported into Capybara
+  updatedAt: string;              // Last modification to ANY field
+  archivedAt: string | null;      // When status changed to "archived"
+  removedAt: string | null;       // When status changed to "removed"
+  lastVisitedAt: string | null;   // Last time user clicked this bookmark in Capybara
+  linkCheckedAt: string | null;   // When linkStatus was last updated
+  categorizedAt: string | null;   // When the current category was assigned
+  importedAt: string;             // When first pulled from the source browser
+  syncedAt: string | null;        // Last successful cloud sync for this record
+
+  // ── Sync metadata ──
+  _rev: number;                   // Monotonic revision counter (local)
+  _deleted: boolean;              // Tombstone for sync (true after purge grace period)
 }
 
-// ===== CATEGORIES =====
+// ═══════════════════════════════════════════════════════════════
+// CATEGORIES — classification buckets (user or AI managed)
+// ═══════════════════════════════════════════════════════════════
 interface CategoryRecord {
   id: string;                     // UUID
-  name: string;
-  description: string;
-  source: "user" | "llm" | "heuristic";
-  parentId: string | null;        // Hierarchical categories
+  name: string;                   // Display name (e.g. "Machine Learning")
+  description: string;            // What belongs here (shown in UI and sent to LLM)
+  color: string | null;           // Hex color for UI badges (e.g. "#4A90D9")
+  icon: string | null;            // Emoji or icon identifier (e.g. "brain", "code")
+
+  // ── Status & lifecycle ──
+  status: CategoryStatus;         // "active" | "archived" | "merged"
+  source: ClassificationSource;   // Who created it
+  mergedIntoCategoryId: string | null; // If status="merged", the surviving category
+
+  // ── Hierarchy ──
+  parentId: string | null;        // FK → categories.id (null = top-level)
+  sortOrder: number;              // Position within siblings (for manual reordering)
+
+  // ── Timestamps ──
   createdAt: string;
   updatedAt: string;
+  archivedAt: string | null;
+
+  // ── Sync ──
   _rev: number;
   _deleted: boolean;
 }
 
-// ===== RECLASSIFICATION HISTORY =====
+// ═══════════════════════════════════════════════════════════════
+// RECLASSIFICATION HISTORY — audit trail for category changes
+// ═══════════════════════════════════════════════════════════════
 interface ReclassificationRecord {
   id: string;                     // UUID
   bookmarkId: string;             // FK → bookmarks.id
-  previousCategoryId: string;
-  newCategoryId: string;
-  source: "user" | "llm";
+
+  // ── What changed ──
+  previousCategoryId: string | null;
+  newCategoryId: string | null;
+  previousTags: string[];         // Snapshot of tags before (if changed)
+  newTags: string[];              // Snapshot of tags after (if changed)
+
+  // ── Who & why ──
+  source: ClassificationSource;   // Who triggered the change
   reason: string | null;          // LLM explanation or user note
-  createdAt: string;
+  confidence: number | null;      // LLM confidence (0.0–1.0)
+
+  // ── When ──
+  createdAt: string;              // When the reclassification happened
 }
 
-// ===== USER PREFERENCES =====
+// ═══════════════════════════════════════════════════════════════
+// LINK CHECKS — log of URL validation attempts
+// ═══════════════════════════════════════════════════════════════
+interface LinkCheckRecord {
+  id: string;                     // UUID
+  bookmarkId: string;             // FK → bookmarks.id
+  url: string;                    // URL that was checked (may differ from bookmark if redirect)
+
+  // ── Result ──
+  status: LinkStatus;             // Result of this check
+  httpStatusCode: number | null;  // HTTP response code
+  finalUrl: string | null;        // Resolved URL after redirects
+  responseTimeMs: number | null;  // How long the check took
+  errorMessage: string | null;    // Error details if broken/timeout
+
+  // ── When ──
+  checkedAt: string;              // When the check ran
+}
+
+// ═══════════════════════════════════════════════════════════════
+// USER PREFERENCES — singleton configuration record
+// ═══════════════════════════════════════════════════════════════
 interface UserPreferences {
   id: "singleton";
+
+  // ── Sync settings ──
   syncEnabled: boolean;
   syncSecret: string | undefined;
   syncKeySource: "user" | "platform";
-  llmConfiguration: LLMConfiguration;
+
+  // ── LLM settings ──
+  llmEnabled: boolean;
+  llmProvider: LLMProviderType;
+  llmEndpoint: string;
+  llmApiKey: string;
+  llmModel: string;
+
+  // ── Link checking ──
+  linkCheckEnabled: boolean;      // Auto-validate URLs periodically
+  linkCheckIntervalHours: number; // How often to re-check (default: 168 = weekly)
+
+  // ── UI ──
+  defaultView: "all" | "active" | "archived";
+  showBrokenLinks: boolean;       // Highlight broken bookmarks in search
+
+  // ── Timestamps ──
   updatedAt: string;
 }
 
-// ===== SYNC CURSOR =====
+// ═══════════════════════════════════════════════════════════════
+// SYNC CURSOR — tracks sync progress with cloud
+// ═══════════════════════════════════════════════════════════════
 interface SyncCursor {
   id: "singleton";
-  lastPulledRev: number;
-  lastPushedRev: number;
-  lastSyncTimestamp: string;
+  lastPulledRev: number;          // Server's last revision we received
+  lastPushedRev: number;          // Our last revision sent to server
+  lastSyncTimestamp: string;      // When last sync completed
   syncState: "idle" | "pushing" | "pulling" | "error";
   errorMessage: string | null;
+  consecutiveFailures: number;    // For exponential backoff
 }
 ```
 
@@ -184,6 +304,7 @@ class CapybaraDB extends Dexie {
   bookmarks!: Table<BookmarkRecord, string>;
   categories!: Table<CategoryRecord, string>;
   reclassifications!: Table<ReclassificationRecord, string>;
+  linkChecks!: Table<LinkCheckRecord, string>;
   preferences!: Table<UserPreferences, string>;
   syncCursor!: Table<SyncCursor, string>;
 
@@ -191,9 +312,15 @@ class CapybaraDB extends Dexie {
     super("capybara");
 
     this.version(1).stores({
-      bookmarks: "id, url, categoryId, *tags, updatedAt, _rev",
-      categories: "id, name, parentId, _rev",
-      reclassifications: "id, bookmarkId, createdAt",
+      bookmarks:
+        "id, url, categoryId, *tags, status, linkStatus, " +
+        "[status+categoryId], [status+linkStatus], updatedAt, _rev",
+      categories:
+        "id, name, parentId, status, [status+sortOrder], _rev",
+      reclassifications:
+        "id, bookmarkId, [bookmarkId+createdAt], createdAt",
+      linkChecks:
+        "id, bookmarkId, [bookmarkId+checkedAt], checkedAt",
       preferences: "id",
       syncCursor: "id"
     });
@@ -205,13 +332,95 @@ export const db = new CapybaraDB();
 
 ### Index Design Rationale
 
-- **`bookmarks.url`**: fast lookup for deduplication during merge.
-- **`bookmarks.categoryId`**: filter all bookmarks in a category.
-- **`bookmarks.*tags`**: `multiEntry` index -- one index entry per tag, enables "find all bookmarks tagged X".
-- **`bookmarks._rev`**: delta sync -- push only records where `_rev > lastPushedRev`.
-- **`categories.name`**: deduplication and lookup by name.
-- **`categories.parentId`**: traverse category hierarchy.
-- **`reclassifications.bookmarkId`**: audit trail per bookmark.
+| Index | Purpose |
+|---|---|
+| `bookmarks.url` | Fast deduplication during merge |
+| `bookmarks.categoryId` | Filter bookmarks by category |
+| `bookmarks.*tags` | multiEntry -- find all bookmarks with a given tag |
+| `bookmarks.status` | Filter active/archived/removed bookmarks |
+| `bookmarks.linkStatus` | Find broken or unchecked links |
+| `bookmarks.[status+categoryId]` | Compound: "active bookmarks in category X" (most common query) |
+| `bookmarks.[status+linkStatus]` | Compound: "active bookmarks that are broken" |
+| `bookmarks._rev` | Delta sync -- push records where `_rev > lastPushed` |
+| `categories.name` | Dedup and lookup by name |
+| `categories.parentId` | Traverse category hierarchy |
+| `categories.[status+sortOrder]` | Compound: "active categories sorted by user order" |
+| `reclassifications.[bookmarkId+createdAt]` | Audit trail per bookmark, chronological |
+| `linkChecks.[bookmarkId+checkedAt]` | Check history per bookmark, chronological |
+
+### Bookmark Lifecycle
+
+```
+                    ┌─────────────────────────────────────────────┐
+                    │              BOOKMARK LIFECYCLE              │
+                    └─────────────────────────────────────────────┘
+
+  Browser API / Import                    User action
+        │                                     │
+        ▼                                     │
+  ┌──────────┐    user archives    ┌──────────▼──┐
+  │  ACTIVE  │ ──────────────────► │  ARCHIVED   │
+  │          │ ◄────────────────── │             │
+  └────┬─────┘    user restores    └──────┬──────┘
+       │                                  │
+       │   user removes                   │  user removes
+       │                                  │
+       ▼                                  ▼
+  ┌──────────┐                     ┌─────────────┐
+  │ REMOVED  │ ◄─────────────────  │  REMOVED    │
+  │ (soft)   │    (same state)     │  (soft)     │
+  └────┬─────┘                     └─────────────┘
+       │
+       │  after sync propagation + grace period
+       ▼
+  ┌──────────┐
+  │ _deleted │   (tombstone — purged eventually)
+  │  = true  │
+  └──────────┘
+
+
+  Link validation (independent of status):
+
+  ┌───────────┐    HTTP 2xx     ┌─────────┐
+  │ UNCHECKED │ ──────────────► │  ALIVE  │
+  └─────┬─────┘                 └────┬────┘
+        │                            │
+        │ HTTP 3xx                   │ HTTP 4xx/5xx
+        ▼                            ▼
+  ┌────────────┐               ┌──────────┐
+  │ REDIRECTED │               │  BROKEN  │
+  │(finalUrl)  │               │          │
+  └────────────┘               └──────────┘
+                                     │
+                          user fixes URL / link returns
+                                     │
+                                     ▼
+                               ┌─────────┐
+                               │  ALIVE  │
+                               └─────────┘
+```
+
+### Category Lifecycle
+
+```
+  Created by user / LLM / heuristic
+        │
+        ▼
+  ┌──────────┐
+  │  ACTIVE  │ ◄──── user reactivates
+  └────┬─────┘
+       │
+       ├── user archives ──────► ┌──────────┐
+       │                         │ ARCHIVED │
+       │                         └──────────┘
+       │
+       └── user merges into Y ─► ┌──────────┐
+                                  │  MERGED  │  mergedIntoCategoryId = Y
+                                  └──────────┘
+                                       │
+                 All bookmarks with this categoryId
+                 are automatically reassigned to Y
+```
 
 ---
 
