@@ -1,4 +1,4 @@
-export const RUNTIME_SYNC_NOW_MESSAGE_TYPE = "capybara::sync-now" as const;
+export const RUNTIME_SYNC_NOW_MESSAGE_TYPE = "capybara::sync-now";
 
 export type RuntimeSyncNowMessage = {
   type: typeof RUNTIME_SYNC_NOW_MESSAGE_TYPE;

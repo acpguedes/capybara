@@ -69,5 +69,23 @@ export default tseslint.config(
         version: "detect"
       }
     }
+  },
+  {
+    files: ["src/**/__tests__/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/unbound-method": "off",
+      "@typescript-eslint/no-var-requires": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unused-vars": "off"
+    }
+  },
+  {
+    files: ["src/types/**/*.d.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/ban-types": "off"
+    }
   }
 );

@@ -7,4 +7,5 @@ if (!rootElement) {
   throw new Error("Failed to locate the popup root element.");
 }
 
+// eslint-disable-next-line react/no-deprecated
 ReactDOM.render(<App />, rootElement);

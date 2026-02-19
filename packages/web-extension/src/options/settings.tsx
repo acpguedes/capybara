@@ -238,7 +238,7 @@ export function Settings(): JSX.Element {
           synced through your browser account. The payload is compressed and encrypted before it
           leaves this device.
         </p>
-        <form onSubmit={handleSyncSubmit}>
+        <form onSubmit={(e) => void handleSyncSubmit(e)}>
           <label>
             <input
               type="checkbox"
@@ -289,7 +289,7 @@ export function Settings(): JSX.Element {
           bookmark titles, URLs, and tags to the configured provider and receives semantic category
           assignments. Categories are created dynamically and evolve as your library grows.
         </p>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(e) => void handleSubmit(e)}>
           <label>
             <input
               type="checkbox"
@@ -307,11 +307,14 @@ export function Settings(): JSX.Element {
                 handleProviderChange(event.target.value as LLMProviderType)
               }
             >
-              {PROVIDER_OPTIONS.map((providerKey) => (
-                <option key={providerKey} value={providerKey}>
-                  {LLM_PROVIDER_LABELS[providerKey]}
-                </option>
-              ))}
+              {PROVIDER_OPTIONS.map((providerKey) => {
+                const label: string = LLM_PROVIDER_LABELS[providerKey];
+                return (
+                  <option key={providerKey} value={providerKey}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </label>
 

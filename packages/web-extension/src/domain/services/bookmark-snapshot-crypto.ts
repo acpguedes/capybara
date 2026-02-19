@@ -2,7 +2,6 @@ import type {
   BookmarkSnapshot,
   BookmarkSnapshotStorageValue,
   EncryptedBookmarkSnapshotPayload,
-  PlainBookmarkSnapshotPayload,
   BookmarkSnapshotCompression
 } from "../models/bookmark-snapshot";
 import type { SyncKeySource } from "../models/sync-settings";
@@ -61,8 +60,16 @@ function getDecompressionStreamConstructor(): DecompressionStreamConstructor | n
   return typeof DecompressionStream === "function" ? DecompressionStream : null;
 }
 
+type NodeBufferLike = {
+  from(input: Uint8Array): NodeBufferLike;
+  from(input: string, encoding: string): NodeBufferLike;
+  toString(encoding: string): string;
+  [index: number]: number;
+  length: number;
+};
+
 function toBase64(bytes: Uint8Array): string {
-  const nodeBuffer = (globalThis as { Buffer?: any }).Buffer;
+  const nodeBuffer = (globalThis as { Buffer?: { from: NodeBufferLike["from"] } }).Buffer;
 
   if (nodeBuffer) {
     return nodeBuffer.from(bytes).toString("base64");
@@ -81,7 +88,7 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 function fromBase64(value: string): Uint8Array {
-  const nodeBuffer = (globalThis as { Buffer?: any }).Buffer;
+  const nodeBuffer = (globalThis as { Buffer?: { from: NodeBufferLike["from"] } }).Buffer;
 
   if (nodeBuffer) {
     return new Uint8Array(nodeBuffer.from(value, "base64"));
@@ -162,6 +169,7 @@ async function getPlatformSecret(): Promise<string> {
 }
 
 function toBufferSource(view: Uint8Array): ArrayBuffer {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
 }
 
@@ -228,7 +236,7 @@ async function compress(
     const response = new Response(stream);
     const buffer = await response.arrayBuffer();
     return {
-      data: new Uint8Array(buffer as ArrayBuffer),
+      data: new Uint8Array(buffer),
       compression: COMPRESSION_FORMAT
     };
   }
@@ -249,6 +257,7 @@ async function decompress(
     typeof Response !== "undefined" &&
     compression === COMPRESSION_FORMAT
   ) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     const sliced = payload.buffer.slice(
       payload.byteOffset,
       payload.byteOffset + payload.byteLength
@@ -314,10 +323,10 @@ export async function decryptBookmarkSnapshot(
   }
 
   if (!("kind" in stored)) {
-    return { snapshot: stored as BookmarkSnapshot, migratedPayload: null };
+    return { snapshot: stored, migratedPayload: null };
   }
 
-  const payload = stored as PlainBookmarkSnapshotPayload | EncryptedBookmarkSnapshotPayload;
+  const payload = stored;
 
   if (payload.kind === "plain") {
     return { snapshot: payload.snapshot ?? null, migratedPayload: null };

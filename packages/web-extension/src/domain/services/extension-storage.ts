@@ -22,7 +22,7 @@ type StorageKeyMap = {
   [CATEGORIES_STORAGE_KEY]: Category[];
 };
 
-type StorageKey = keyof StorageKeyMap & string;
+type StorageKey = keyof StorageKeyMap;
 
 type StorageValue<K extends StorageKey> = StorageKeyMap[K];
 
@@ -89,7 +89,7 @@ export async function getItem<K extends StorageKey>(
 
   for (const storage of storageAreas) {
     const result = await storage.get(key);
-    const record = (result ?? {}) as Record<string, unknown>;
+    const record = result ?? {};
 
     if (Object.prototype.hasOwnProperty.call(record, key)) {
       const value = record[key] ?? null;
