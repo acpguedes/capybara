@@ -11,6 +11,7 @@ This directory captures the technical plan and operating guides that support the
 ## Reference
 
 - [Architecture Overview](architecture/overview.md)
+- [Database Architecture](architecture/database.md) -- storage layer, schema, and cloud sync strategy
 - [LLM Configuration Guide](configuration/llm-setup.md)
 - [Synchronization Protocol](sync/protocol.md)
 - [UX Reference](ux/experience.md)
