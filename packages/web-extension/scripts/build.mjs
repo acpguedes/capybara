@@ -78,10 +78,18 @@ async function copyPublicAssets() {
         const popupDestination = path.join(distDirectory, "popup");
         await mkdir(popupDestination, { recursive: true });
         await copyFile(source, path.join(popupDestination, "index.html"));
+      } else if (asset.name === "popup.css") {
+        const popupDestination = path.join(distDirectory, "popup");
+        await mkdir(popupDestination, { recursive: true });
+        await copyFile(source, path.join(popupDestination, "popup.css"));
       } else if (asset.name === "options.html") {
         const optionsDestination = path.join(distDirectory, "options");
         await mkdir(optionsDestination, { recursive: true });
         await copyFile(source, path.join(optionsDestination, "index.html"));
+      } else if (asset.name === "options.css") {
+        const optionsDestination = path.join(distDirectory, "options");
+        await mkdir(optionsDestination, { recursive: true });
+        await copyFile(source, path.join(optionsDestination, "options.css"));
       } else {
         const destination = path.join(distDirectory, asset.name);
         await mkdir(path.dirname(destination), { recursive: true });
@@ -116,6 +124,12 @@ async function run() {
   });
 
   await copyPublicAssets();
+
+  const manifestSource = path.join(projectRoot, "manifest.json");
+  if (await pathExists(manifestSource)) {
+    await copyFile(manifestSource, path.join(distDirectory, "manifest.json"));
+  }
+
   await writeIcons(path.join(distDirectory, "icons"));
 
   console.log(`Bundled ${Object.keys(entryPoints).length} entry point(s) into ${path.relative(projectRoot, distDirectory)}`);

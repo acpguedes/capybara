@@ -232,6 +232,37 @@ const collectElements = (
   }
 };
 
+const findButtonByText = (
+  tree: ReactElement,
+  text: string
+): ReactElement | null => {
+  const buttons: ReactElement[] = [];
+  collectElements(tree, (candidate) => candidate.type === "button", buttons);
+
+  for (const button of buttons) {
+    const textContent = extractTextContent(button);
+    if (textContent.includes(text)) {
+      return button;
+    }
+  }
+
+  return null;
+};
+
+const extractTextContent = (element: ReactElement): string => {
+  const parts: string[] = [];
+
+  for (const child of toChildArray(element.props.children)) {
+    if (typeof child === "string") {
+      parts.push(child);
+    } else if (child && typeof child === "object") {
+      parts.push(extractTextContent(child as ReactElement));
+    }
+  }
+
+  return parts.join("");
+};
+
 const createFakeTimers = () => {
   let nextId = 1;
   const timers: TimerEntry[] = [];
@@ -345,11 +376,18 @@ describe("Settings component", () => {
 
     try {
       const { Settings } = await import("../settings");
-      const tree = hooks.render(() => Settings() as ReactElement);
+      hooks.render(() => Settings() as ReactElement);
 
+      const syncTabButton = findButtonByText(hooks.getTree(), "Synchronization");
+      assert.ok(syncTabButton, "Synchronization tab button should exist");
+
+      const onTabClick = syncTabButton!.props.onClick as () => void;
+      onTabClick();
+
+      const syncTree = hooks.getTree();
       const forms: ReactElement[] = [];
-      collectElements(tree, (candidate) => candidate.type === "form", forms);
-      assert.ok(forms.length >= 2);
+      collectElements(syncTree, (candidate) => candidate.type === "form", forms);
+      assert.ok(forms.length >= 1, "Sync tab should contain a form");
 
       const syncForm = forms[0];
       const onSubmit = syncForm.props.onSubmit as (
@@ -416,13 +454,20 @@ describe("Settings component", () => {
 
     try {
       const { Settings } = await import("../settings");
-      const tree = hooks.render(() => Settings() as ReactElement);
+      hooks.render(() => Settings() as ReactElement);
 
+      const llmTabButton = findButtonByText(hooks.getTree(), "LLM Configuration");
+      assert.ok(llmTabButton, "LLM Configuration tab button should exist");
+
+      const onTabClick = llmTabButton!.props.onClick as () => void;
+      onTabClick();
+
+      const llmTree = hooks.getTree();
       const forms: ReactElement[] = [];
-      collectElements(tree, (candidate) => candidate.type === "form", forms);
-      assert.ok(forms.length >= 2);
+      collectElements(llmTree, (candidate) => candidate.type === "form", forms);
+      assert.ok(forms.length >= 1, "LLM tab should contain a form");
 
-      const llmForm = forms[1];
+      const llmForm = forms[0];
       const onSubmit = llmForm.props.onSubmit as (
         event: { preventDefault: () => void }
       ) => Promise<void>;
