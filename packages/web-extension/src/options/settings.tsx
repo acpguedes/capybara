@@ -99,7 +99,8 @@ function renderQuickStartTab(): JSX.Element {
               <p>
                 Go to the <strong>LLM Configuration</strong> tab to connect a cloud provider
                 (OpenAI, Anthropic, Gemini) or a local model (Ollama) for automatic bookmark
-                categorization.
+                categorization. See the <strong>LLM Account Setup</strong> section below for
+                detailed instructions on obtaining API keys.
               </p>
             </div>
           </li>
@@ -114,6 +115,92 @@ function renderQuickStartTab(): JSX.Element {
             </div>
           </li>
         </ol>
+      </div>
+
+      <div className="card">
+        <h2>Accessing Capybara Pages</h2>
+        <p>
+          Capybara has two main interfaces. Here is how to access each one:
+        </p>
+        <ul>
+          <li>
+            <strong>Popup (quick search):</strong> Click the Capybara icon in your browser
+            toolbar. This opens a compact panel for instant bookmark search.
+          </li>
+          <li>
+            <strong>Options / Settings (this page):</strong> Right-click the Capybara icon
+            and select <strong>Options</strong>. Alternatively, go
+            to <code>chrome://extensions</code>, find Capybara, click <strong>Details</strong>,
+            then <strong>Extension options</strong>. On Firefox,
+            visit <code>about:addons</code>, find Capybara, and click <strong>Preferences</strong>.
+          </li>
+          <li>
+            <strong>Development preview:</strong> If running the dev server
+            (<code>npm run serve</code>), access the popup
+            at <code>http://localhost:4173/popup/</code> and this settings page
+            at <code>http://localhost:4173/options/</code>.
+          </li>
+        </ul>
+      </div>
+
+      <div className="card">
+        <h2>Database</h2>
+        <p>
+          Capybara uses <strong>Dexie.js</strong> (an IndexedDB wrapper) as its local database.
+          The database is created automatically the first time the extension loads — no manual
+          setup is required.
+        </p>
+        <p>
+          All bookmark records, categories, reclassification history, and preferences are
+          stored locally in your browser via IndexedDB. Data never leaves your device unless
+          you explicitly enable cloud sync or LLM categorization.
+        </p>
+        <p>
+          If you previously used an older version of Capybara that stored data
+          in <code>chrome.storage</code>, your bookmarks will be migrated to the new
+          database automatically on first load.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>LLM Account Setup</h2>
+        <p>
+          To use AI-powered categorization, you need an API key from one of the
+          supported providers. Choose the provider that best fits your needs and
+          follow the steps below:
+        </p>
+        <ul>
+          <li>
+            <strong>OpenAI:</strong> Create an account
+            at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">platform.openai.com/api-keys</a> and
+            generate an API key (starts with <code>sk-</code>).
+          </li>
+          <li>
+            <strong>Anthropic (Claude):</strong> Create an account
+            at <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> and
+            generate an API key (starts with <code>sk-ant-</code>).
+          </li>
+          <li>
+            <strong>Google Gemini:</strong> Get a key
+            at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>.
+          </li>
+          <li>
+            <strong>Ollama (Local):</strong> Install Ollama
+            from <a href="https://ollama.com/" target="_blank" rel="noreferrer">ollama.com</a>,
+            run <code>ollama pull llama3.2</code>, and start the server
+            with <code>ollama serve</code>. No API key is needed.
+          </li>
+          <li>
+            <strong>Custom Endpoint:</strong> Enter any OpenAI-compatible endpoint URL
+            (LM Studio, vLLM, Together AI, etc.) along with its API key if required.
+          </li>
+        </ul>
+        <p>
+          After obtaining your key, go to the <strong>LLM Configuration</strong> tab above,
+          select your provider, paste the API key, and click <strong>Save LLM settings</strong>.
+          The extension will request permission to contact the provider endpoint — approve
+          it when prompted by the browser.
+        </p>
       </div>
 
       <div className="disclaimer-banner">
