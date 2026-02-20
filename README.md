@@ -34,11 +34,43 @@ This type-checks the project (`tsc --noEmit`) and bundles everything into `dist/
 3. Click **Load unpacked** and select the `packages/web-extension/` folder.
 4. The Capybara icon appears in the toolbar. Click it to search your bookmarks.
 
-### 4. Verify
+### 4. Open the Configuration Pages
+
+Capybara has two user-facing pages:
+
+- **Popup (quick search):** Click the Capybara icon in the browser toolbar.
+- **Options / Settings:** Right-click the Capybara icon and select **Options**. Alternatively, go to `chrome://extensions`, find Capybara, click **Details** → **Extension options**. On Firefox, visit `about:addons` and click **Preferences** on the Capybara entry.
+
+From the options page you can configure AI categorization, multi-device sync, and review the Quick Start guide.
+
+### 5. Database (automatic)
+
+Capybara uses **Dexie.js** (IndexedDB) as its local database. The database is created automatically the first time the extension loads — no manual setup is required. All bookmarks, categories, and preferences are stored locally in your browser.
+
+### 6. Configure LLM Categorization (optional)
+
+To enable AI-powered bookmark categorization, you need an API key from a supported provider:
+
+| Provider | Where to get a key | Default model |
+|---|---|---|
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | `gpt-4o-mini` |
+| Anthropic (Claude) | [console.anthropic.com](https://console.anthropic.com/) | `claude-sonnet-4-20250514` |
+| Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `gemini-2.0-flash` |
+| Ollama (local) | [ollama.com](https://ollama.com/) — no key needed | `llama3.2` |
+| Custom endpoint | Any OpenAI-compatible URL | (user-defined) |
+
+1. Open the **Options** page (step 4 above).
+2. Go to the **LLM Configuration** tab.
+3. Select your provider, paste the API key, and click **Save LLM settings**.
+4. Approve the host permission prompt from the browser.
+
+See the full [LLM Configuration Guide](docs/configuration/llm-setup.md) for provider-specific details.
+
+### 7. Verify
 
 ```bash
 npm run lint    # ESLint — should show 0 errors
-npm run test    # Build + 63 unit tests — should all pass
+npm run test    # Build + unit tests — should all pass
 ```
 
 ### Development Server
@@ -47,6 +79,8 @@ npm run test    # Build + 63 unit tests — should all pass
 npm run serve   # Preview server on http://localhost:4173
 npm run demo    # Headless Chromium + preview server + DevTools on :9222
 ```
+
+When using the dev server, access the popup at `http://localhost:4173/popup/` and the options page at `http://localhost:4173/options/`.
 
 For a complete environment setup, see the [Environment Setup Guide](docs/setup/environment.md).
 
