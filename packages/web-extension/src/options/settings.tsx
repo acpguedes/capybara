@@ -705,9 +705,11 @@ export function Settings(): JSX.Element {
       }, 2000);
     } catch (error) {
       console.error("Failed to persist LLM configuration", error);
-      setLlmError((previous) =>
-        previous ?? "Unable to save settings. Please check the extension console."
-      );
+      const fallback =
+        error instanceof Error && error.message.includes("storage is unavailable")
+          ? "Extension storage is unavailable. Make sure you opened this page through the extension (right-click the Capybara icon → Options), not the development server."
+          : "Unable to save settings. Please check the extension console.";
+      setLlmError((previous) => previous ?? fallback);
       setSaveStatus("error");
     }
   }

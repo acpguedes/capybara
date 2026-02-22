@@ -19,6 +19,12 @@ cd capybara/packages/web-extension
 npm install
 ```
 
+> **Tip:** If `npm install` fails with peer-dependency errors (common on npm 7+), retry with the legacy resolver:
+>
+> ```bash
+> npm install --legacy-peer-deps
+> ```
+
 ### 2. Build
 
 ```bash
@@ -31,7 +37,7 @@ This type-checks the project (`tsc --noEmit`) and bundles everything into `dist/
 
 1. Open `chrome://extensions` (or `edge://extensions`).
 2. Enable **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and select the `packages/web-extension/` folder.
+3. Click **Load unpacked** and select the `packages/web-extension/dist` folder (created by the build step).
 4. The Capybara icon appears in the toolbar. Click it to search your bookmarks.
 
 ### 4. Open the Configuration Pages
