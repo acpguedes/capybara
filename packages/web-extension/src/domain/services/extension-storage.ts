@@ -14,12 +14,22 @@ import {
   CATEGORIES_STORAGE_KEY,
   type Category
 } from "../models/category";
+import {
+  BOOKMARK_RELATIONS_STORAGE_KEY,
+  type BookmarkRelation
+} from "../models/bookmark-relation";
+import {
+  USAGE_EVENTS_STORAGE_KEY,
+  type UsageEvent
+} from "../models/usage-event";
 
 type StorageKeyMap = {
   [LLM_CONFIGURATION_STORAGE_KEY]: LLMConfiguration;
   [BOOKMARK_SNAPSHOT_STORAGE_KEY]: BookmarkSnapshotStorageValue;
   [SYNC_SETTINGS_STORAGE_KEY]: SyncSettings;
   [CATEGORIES_STORAGE_KEY]: Category[];
+  [BOOKMARK_RELATIONS_STORAGE_KEY]: BookmarkRelation[];
+  [USAGE_EVENTS_STORAGE_KEY]: UsageEvent[];
 };
 
 type StorageKey = keyof StorageKeyMap;

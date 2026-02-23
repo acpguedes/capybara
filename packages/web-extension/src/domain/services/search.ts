@@ -27,6 +27,70 @@ export function resetSearchSyncSettingsLoader(): void {
   loadSyncSettings = defaultLoadSyncSettings;
 }
 
+export interface ScoredBookmark {
+  bookmark: CategorizedBookmark;
+  score: number;
+}
+
+function computeRelevanceScore(
+  bookmark: CategorizedBookmark,
+  term: string
+): number {
+  const lowerTerm = term.toLowerCase();
+  const titleLower = bookmark.title.toLowerCase();
+  const urlLower = bookmark.url.toLowerCase();
+  const categoryLower = bookmark.category.toLowerCase();
+  const tagsLower = bookmark.tags.map((t) => t.toLowerCase());
+
+  let score = 0;
+
+  if (titleLower === lowerTerm) {
+    score += 100;
+  } else if (titleLower.startsWith(lowerTerm)) {
+    score += 80;
+  } else if (titleLower.includes(lowerTerm)) {
+    score += 60;
+  }
+
+  if (urlLower.includes(lowerTerm)) {
+    score += 30;
+  }
+
+  if (categoryLower === lowerTerm) {
+    score += 50;
+  } else if (categoryLower.includes(lowerTerm)) {
+    score += 25;
+  }
+
+  for (const tag of tagsLower) {
+    if (tag === lowerTerm) {
+      score += 45;
+      break;
+    } else if (tag.includes(lowerTerm)) {
+      score += 20;
+      break;
+    }
+  }
+
+  const words = lowerTerm.split(/\s+/).filter((w) => w.length > 0);
+  if (words.length > 1) {
+    let matchedWords = 0;
+    for (const word of words) {
+      if (
+        titleLower.includes(word) ||
+        urlLower.includes(word) ||
+        categoryLower.includes(word) ||
+        tagsLower.some((t) => t.includes(word))
+      ) {
+        matchedWords++;
+      }
+    }
+    score += Math.round((matchedWords / words.length) * 40);
+  }
+
+  return score;
+}
+
 class SearchIndex {
   private items: CategorizedBookmark[] = [];
   private merged: Bookmark[] = [];
@@ -45,6 +109,27 @@ class SearchIndex {
         bookmark.category.toLowerCase().includes(normalizedTerm)
       );
     });
+  }
+
+  public scoredQuery(term: string): ScoredBookmark[] {
+    if (!term.trim()) {
+      return this.items.map((bookmark) => ({ bookmark, score: 0 }));
+    }
+
+    const results: ScoredBookmark[] = [];
+
+    for (const bookmark of this.items) {
+      const score = computeRelevanceScore(bookmark, term);
+      if (score > 0) {
+        results.push({ bookmark, score });
+      }
+    }
+
+    return results.sort((a, b) => b.score - a.score);
+  }
+
+  public getItemCount(): number {
+    return this.items.length;
   }
 
   public getMergedSnapshot(): Bookmark[] {
