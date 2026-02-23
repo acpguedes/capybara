@@ -1,6 +1,69 @@
-# Capybara
+<p align="center">
+  <img src="docs/assets/capybara-logo.png" alt="Capybara" width="200" />
+</p>
 
-Capybara is a browser extension that unifies bookmarks from multiple browsers into a single, searchable library. The project is intentionally lightweight today, but its architecture is designed to grow into a dependable companion for people who maintain browser workflows across devices and ecosystems.
+<h1 align="center">Capybara</h1>
+
+<p align="center">
+  <strong>Your personal knowledge companion for the web.</strong><br/>
+  A privacy-first browser extension that turns scattered bookmarks into an organized, searchable knowledge library.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/manifest-v3-blue" alt="Manifest V3" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript Strict" />
+  <img src="https://img.shields.io/badge/React-18.2-61dafb" alt="React 18.2" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
+  <img src="https://img.shields.io/badge/privacy-local--first-blueviolet" alt="Privacy: Local-first" />
+</p>
+
+---
+
+## Why Capybara?
+
+Saving bookmarks is easy. **Remembering, connecting, and reusing** them is the hard part.
+
+Capybara is more than a bookmark manager. It's a **personal knowledge system** that lives in your browser:
+
+- **Unifies bookmarks** across Chromium and Firefox into one searchable library
+- **Automatically categorizes** your links using tags, domain heuristics, or optional AI enrichment
+- **Connects knowledge** by discovering relationships between your saved resources
+- **Recalls intelligently** by learning which bookmarks matter most to you
+- **Respects your privacy** with local-first storage and optional encrypted sync
+
+Like its namesake, Capybara is calm, reliable, and quietly helpful. It stays invisible when you don't need it and becomes indispensable when you do.
+
+---
+
+## Feature Highlights
+
+| Feature | Description |
+|---------|-------------|
+| **Cross-browser merging** | Deduplicates bookmarks from Chromium and Firefox, preserving unique entries from each |
+| **Smart categorization** | Derives categories from tags, hostnames, or AI-powered semantic analysis |
+| **Instant search** | Client-side full-text search across titles, URLs, categories, and tags with relevance scoring |
+| **Knowledge relationships** | Discovers connections between bookmarks (same domain, same category, similar content) |
+| **Usage intelligence** | Tracks access patterns to surface your most relevant bookmarks when you need them |
+| **On-demand LLM enrichment** | Optional AI categorization via OpenAI, Anthropic, Google Gemini, Ollama, or custom endpoints |
+| **Encrypted sync** | Optional multi-device synchronization with AES-GCM encryption and PBKDF2 key derivation |
+| **Privacy-first** | All data stays local by default. No third-party access unless you explicitly enable it |
+
+---
+
+## How It Works
+
+```
+Fetch (browser APIs) --> Merge (deduplicate) --> Categorize (enrich) --> Relate (connect) --> Index (search) --> Render (UI)
+```
+
+1. **Fetch** -- Background service worker collects bookmarks from Chromium and Firefox APIs concurrently
+2. **Merge** -- Deduplication engine normalizes URLs and combines entries, preserving browser-specific metadata
+3. **Categorize** -- Heuristic categorizer assigns labels from tags or hostnames; optional LLM enrichment adds semantic categories
+4. **Relate** -- Knowledge graph builder discovers connections between bookmarks by domain, category, and content similarity
+5. **Index** -- In-memory search index enables sub-100ms queries with relevance scoring
+6. **Render** -- React-driven popup for quick search; options page for configuration and exploration
+
+---
 
 ## Quick Start
 
@@ -33,91 +96,93 @@ npm run build
 
 This type-checks the project (`tsc --noEmit`) and bundles everything into `dist/`.
 
-### 3. Load the Extension in Your Browser
+### 3. Load the Extension
 
 1. Open `chrome://extensions` (or `edge://extensions`).
 2. Enable **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and select the `packages/web-extension/dist` folder (created by the build step).
+3. Click **Load unpacked** and select the `packages/web-extension/dist` folder.
 4. The Capybara icon appears in the toolbar. Click it to search your bookmarks.
 
-### 4. Open the Configuration Pages
-
-Capybara has two user-facing pages:
+### 4. Configure (Optional)
 
 - **Popup (quick search):** Click the Capybara icon in the browser toolbar.
-- **Options / Settings:** Right-click the Capybara icon and select **Options**. Alternatively, go to `chrome://extensions`, find Capybara, click **Details** → **Extension options**. On Firefox, visit `about:addons` and click **Preferences** on the Capybara entry.
+- **Options / Settings:** Right-click the Capybara icon and select **Options**.
 
 From the options page you can configure AI categorization, multi-device sync, and review the Quick Start guide.
 
-### 5. Database (automatic)
+### 5. AI Categorization (Optional)
 
-Capybara uses **Dexie.js** (IndexedDB) as its local database. The database is created automatically the first time the extension loads — no manual setup is required. All bookmarks, categories, and preferences are stored locally in your browser.
-
-### 6. Configure LLM Categorization (optional)
-
-To enable AI-powered bookmark categorization, you need an API key from a supported provider:
+To enable AI-powered bookmark categorization, configure an API key from a supported provider:
 
 | Provider | Where to get a key | Default model |
 |---|---|---|
 | OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | `gpt-4o-mini` |
 | Anthropic (Claude) | [console.anthropic.com](https://console.anthropic.com/) | `claude-sonnet-4-20250514` |
 | Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `gemini-2.0-flash` |
-| Ollama (local) | [ollama.com](https://ollama.com/) — no key needed | `llama3.2` |
+| Ollama (local) | [ollama.com](https://ollama.com/) -- no key needed | `llama3.2` |
 | Custom endpoint | Any OpenAI-compatible URL | (user-defined) |
-
-1. Open the **Options** page (step 4 above).
-2. Go to the **LLM Configuration** tab.
-3. Select your provider, paste the API key, and click **Save LLM settings**.
-4. Approve the host permission prompt from the browser.
 
 See the full [LLM Configuration Guide](docs/configuration/llm-setup.md) for provider-specific details.
 
-### 7. Verify
+### 6. Verify
 
 ```bash
-npm run lint    # ESLint — should show 0 errors
-npm run test    # Build + unit tests — should all pass
+npm run lint    # ESLint -- should show 0 errors
+npm run test    # Build + unit tests -- should all pass
 ```
 
-### Development Server
+---
 
-```bash
-npm run serve   # Preview server on http://localhost:4173
-npm run demo    # Headless Chromium + preview server + DevTools on :9222
-```
+## Architecture
 
-When using the dev server, access the popup at `http://localhost:4173/popup/` and the options page at `http://localhost:4173/options/`.
+Capybara follows a layered architecture with clear separation between data acquisition, domain logic, and presentation:
 
-For a complete environment setup, see the [Environment Setup Guide](docs/setup/environment.md).
+| Layer | Responsibility | Key Modules |
+|-------|---------------|-------------|
+| **Background worker** | Orchestrates multi-browser sync, schedules periodic updates | [`background/index.ts`](packages/web-extension/src/background/index.ts) |
+| **Domain models** | TypeScript interfaces for bookmarks, categories, relationships, usage | [`domain/models/`](packages/web-extension/src/domain/models/) |
+| **Domain services** | Merge, categorize, relate, search, track -- pure business logic | [`domain/services/`](packages/web-extension/src/domain/services/) |
+| **LLM providers** | Multi-provider abstraction for AI categorization | [`domain/services/llm-providers/`](packages/web-extension/src/domain/services/llm-providers/) |
+| **Storage** | Cross-browser storage abstraction with encryption support | [`domain/services/extension-storage.ts`](packages/web-extension/src/domain/services/extension-storage.ts) |
+| **UI** | React popup (search) and options page (configuration) | [`popup/`](packages/web-extension/src/popup/), [`options/`](packages/web-extension/src/options/) |
 
-## Vision
+A deeper breakdown is available in [`docs/architecture/overview.md`](docs/architecture/overview.md).
 
-Deliver a privacy-conscious bookmark hub that mirrors the calm, helpful nature of its namesake: effortless setup, no data lock-in, and instant recall of the things you save online. Capybara should feel invisible when you do not need it and unmissable when you do.
+---
 
-## Feature Highlights
+## Roadmap
 
-- **Cross-browser merging:** Deduplicate bookmarks coming from Chromium and Firefox providers while preserving unique entries.
-- **Automatic organization:** Derive categories from tags or hostnames so similar links cluster together even without manual filing.
-- **Instant search:** Query titles, URLs, and categories entirely client-side via the shared search index.
-- **Friendly UI surfaces:** React-driven popup and options pages keep interactions simple while leaving room for advanced features.
-- **On-demand LLM enrichment:** Host permissions for external LLM endpoints are only requested after you enable the optional categorization feature and provide a URL, keeping the base extension free of third-party access.
+Capybara is evolving from a bookmark organizer into a full **personal knowledge management system**. Here's the vision:
 
-## Architecture Summary
+### Phase 1 -- Foundation (current)
+- [x] Cross-browser bookmark merging (Chromium + Firefox)
+- [x] Heuristic and AI-powered categorization
+- [x] In-memory search with relevance scoring
+- [x] Encrypted multi-device sync
+- [x] Bookmark relationship discovery (knowledge graph)
+- [x] Usage tracking for intelligent recall
 
-```
-Fetch (browser APIs) → Merge (deduplicate) → Categorize (tag) → Index (search) → Render (UI)
-```
+### Phase 2 -- Intelligence
+- [ ] Semantic search with embeddings (local or API-based)
+- [ ] Auto-generated summaries for saved pages
+- [ ] Smart suggestions ("You saved similar content about X")
+- [ ] Broken link detection and health monitoring
+- [ ] Per-record reclassification history (audit trail)
 
-- **Background sync:** [`src/background/index.ts`](packages/web-extension/src/background/index.ts) orchestrates multi-browser synchronization using provider modules under `src/background/bookmark-sync`.
-- **Domain services:** [`merger.ts`](packages/web-extension/src/domain/services/merger.ts), [`categorizer.ts`](packages/web-extension/src/domain/services/categorizer.ts), and [`search.ts`](packages/web-extension/src/domain/services/search.ts) compose the data pipeline feeding the UI.
-- **Interfaces:** The popup [`App`](packages/web-extension/src/popup/App.tsx) surfaces indexed bookmarks, while the options [`Settings`](packages/web-extension/src/options/settings.tsx) component demonstrates configuration hooks.
+### Phase 3 -- Knowledge Agent
+- [ ] Cross-reference bookmarks with local projects and documents
+- [ ] "What's relevant to my current task?" contextual queries
+- [ ] Insight generation from bookmark clusters
+- [ ] Export knowledge maps as structured documents
+- [ ] Safari and mobile browser providers
 
-A deeper architectural breakdown is available in [`docs/architecture/overview.md`](docs/architecture/overview.md).
+---
 
 ## Documentation
 
 | Guide | Description |
 |---|---|
+| [Product Vision](docs/vision/product-vision.md) | Strategic direction and knowledge management philosophy |
 | [Environment Setup](docs/setup/environment.md) | Prerequisites, installation, first build |
 | [Development Workflow](docs/setup/development-workflow.md) | Daily commands, testing, code conventions |
 | [Troubleshooting](docs/setup/troubleshooting.md) | Common issues and solutions |
@@ -128,9 +193,36 @@ A deeper architectural breakdown is available in [`docs/architecture/overview.md
 | [UX Reference](docs/ux/experience.md) | User-facing behavior standards |
 | [Operations Playbook](docs/operations/runbook.md) | Quality gates, release, incident response |
 
-## Docker
+---
 
-Run the browser-enabled test environment in Docker when you want an isolated Chromium install or a reproducible CI-like setup.
+## Development
+
+### Commands
+
+All commands run from `packages/web-extension/`:
+
+```bash
+npm install                # Install dependencies
+npm run build              # Type-check (tsc --noEmit) + bundle via esbuild
+npm run lint               # ESLint on src/**/*.{ts,tsx}
+npm run test               # Build then run all unit tests
+npm run verify:jsx         # Validate JSX build output
+npm run serve              # Development server on :4173
+npm run demo               # Interactive demo with headless Chromium
+npm run package            # Create distributable .zip
+```
+
+### Quality Gate (run before every PR)
+
+```bash
+cd packages/web-extension && npm run lint && npm run test
+```
+
+CI runs: `lint` -> `test` -> `verify:jsx` on Node 20 / ubuntu-latest.
+
+### Docker
+
+Run the browser-enabled test environment in Docker for an isolated, reproducible setup:
 
 ```bash
 docker compose build                                    # Build image
@@ -138,25 +230,15 @@ docker compose run --rm web-extension npm run test      # Run tests
 docker compose up web-extension                         # Demo server on :4173, DevTools on :9222
 ```
 
-The container serves static assets on `http://127.0.0.1:4173` and launches Chromium in headless mode with remote debugging on port `9222`. Visit `http://127.0.0.1:4173/popup/` for the popup UI or `http://127.0.0.1:4173/options/` for the options screen.
-
-For an interactive shell:
-
-```bash
-docker compose run --rm --service-ports web-extension bash
-```
-
-Or use the helper script:
-
-```bash
-./scripts/run-docker-tests.sh
-```
+---
 
 ## Branding & Assets
 
-- SVG masters live in `packages/web-extension/public/icons/`.
-- PNG renditions are generated during the build by `scripts/generate-icons.mjs`.
-- Run `node ./scripts/generate-icons.mjs` from `packages/web-extension/` to refresh PNGs manually.
+- **Logo:** [`docs/assets/capybara-logo.png`](docs/assets/capybara-logo.png) (full mascot) and [`docs/assets/capybara-favicon.png`](docs/assets/capybara-favicon.png) (square icon)
+- **Extension icons:** SVG masters in `packages/web-extension/public/icons/`, PNGs generated during build
+- Run `node ./scripts/generate-icons.mjs` from `packages/web-extension/` to refresh PNGs
+
+---
 
 ## Contributing
 
@@ -164,8 +246,8 @@ Contributions are welcome. Open an issue or pull request describing the problem 
 
 When you need to install or update dependencies, run `npm install` from `packages/web-extension/` and commit the resulting `package-lock.json` alongside your changes.
 
-### Quality Gate (run before every PR)
+---
 
-```bash
-cd packages/web-extension && npm run lint && npm run test
-```
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
